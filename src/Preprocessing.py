@@ -11,6 +11,8 @@ from scipy import sparse
 import json
 
 def read_all_shards(partition='dev', data_dir=data_partitions_dirpath):
+    """
+    """
     shards = []
     for fn in os.listdir(os.path.join(data_dir, partition)):
         with open(os.path.join(data_dir, partition, fn)) as f:
@@ -18,6 +20,8 @@ def read_all_shards(partition='dev', data_dir=data_partitions_dirpath):
     return pd.concat(shards)
 
 def one_hot_encoding(X, vocab, max_len):
+    """
+    """
     row_index = np.arange((max_len))
     num = 0
     X_res = None
@@ -31,6 +35,8 @@ def one_hot_encoding(X, vocab, max_len):
         # chop the indices
         col_index = col_index[:max_len] + [0] * max(max_len - xlen, 0)
         new_sparse = sparse.coo_matrix((data, (row_index, col_index)), shape=(max_len, 26))
+        # please note that I have concat all the sparse matrix together for storage purpose
+        # if you want to use the data, remember to separate them with max_len
         if X_res is None:
             X_res = new_sparse
         else:
@@ -38,6 +44,13 @@ def one_hot_encoding(X, vocab, max_len):
     return X_res
 
 def parse_and_save_dense_mat(X, path, to_sparse=True):
+    """
+    Function to parse the sparse matrix and save it to path
+    input: 
+        X: the input sparse matrix
+        path: destination of storage
+        to_sparse: whether the data should be stored directly as sparse matrix or turn it into normal matrix
+    """
     if to_sparse:
         sparse.save_npz(path, X)
     else:
