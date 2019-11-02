@@ -40,7 +40,7 @@ def one_hot_encoding(X, vocab, max_len):
         if X_res is None:
             X_res = new_sparse
         else:
-            sparse.hstack((X_res, new_sparse))
+            X_res = sparse.vstack((X_res, new_sparse))
     return X_res
 
 def parse_and_save_dense_mat(X, path, to_sparse=True):
