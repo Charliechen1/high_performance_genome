@@ -42,7 +42,9 @@ def parse_args(argv=None):
     parser.add_argument('-p', '--padding_size', type=int, help='the size of the padding', default=300)
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='run in debug mode i.e. only run two batches')
     parser.add_argument('-l', '--logger', type=parse_logger, default='', help='path to logger [stdout]')
+    parser.add_argument('-g', '--gpu', action='store_true', default=False, help='use GPU')
     parser.add_argument('-c', '--config', type=str, help='path of the configuration', default="../../../config/main.conf")
+    parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
     
     if len(argv) == 0:
         parser.print_help()
@@ -52,17 +54,33 @@ def parse_args(argv=None):
     ret = vars(args)
     return ret
 
-def train(X_train, y_train, epoches=10):
+def _parse_cuda_index_helper(s):
+    try:
+        i = int(s)
+        if i > torch.cuda.device_count() or i < 0:
+            raise ValueError(s)
+        return i
+    except :
+        devices = str(np.arange(torch.cuda.device_count()))
+        raise argparse.ArgumentTypeError(f'{s} is not a valid CUDA index. Please choose from {devices}')
+        
+        
+def parse_cuda_index(string):
+    if string == 'all':
+        return list(range(torch.cuda.device_count()))
+    else:
+        if ',' in string:
+            return [_parse_cuda_index_helper(_) for _ in string.split(',')]
+        else:
+            return _parse_cuda_index_helper(string)
+        
+        
+def train(X_train, y_train, model, epoches=10):
     """
     The training function
     """
     torch.manual_seed(1)
 
-    model = LSTMTagger(kwargs["emb_dim"], 
-                       kwargs["hid_dim"], 
-                       len(g_pool['vocab']), 
-                       len(g_pool['fams']), 
-                       kwargs["batch_size"])
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adagrad(model.parameters(), lr=0.01)
 
@@ -162,12 +180,18 @@ def load_data():
     return X_train_raw, X_test_raw, y_train, y_test
 
 def run_serial():
+    config = kwargs['config']
+    cuda_index = kwargs['cuda_index']
+    debug = kwargs['debug']
+    gpu = kwargs['gpu']
+    cuda_index = kwargs['cuda_index']
+    
     # configuration
-    load_conf(kwargs["config"])
+    load_conf(config)
     
     # prepare logging
     global logger
-    logger = kwargs['logger']
+    logger = kwargs["logger"]
     
     if logger is None:
         logger = logging.getLogger()
@@ -177,13 +201,35 @@ def run_serial():
     logger.info("The arguments are: %s", kwargs)
     
     # load data
+    # data should be load before model
+    # as there are vocab and fams
     logger.debug("start loading data")
     X_train, X_test, y_train, y_test = load_data()
     logger.debug("finish loading data")
     
+    # get model
+    model = LSTMTagger(kwargs["emb_dim"], 
+                       kwargs["hid_dim"], 
+                       len(g_pool['vocab']), 
+                       len(g_pool['fams']), 
+                       kwargs["batch_size"])
+    
+    # check device
+    if gpu:
+        print(cuda_index)
+        to_index = cuda_index
+        if isinstance(cuda_index, list):
+            to_index = cuda_index[0]
+            model = nn.DataParallel(model, device_ids=cuda_index)
+            logger.info(f'running on GPUs {cuda_index}')
+        device = torch.device(f"cuda:{to_index}")
+        logger.info(f'sending data to CUDA device {str(device)}')
+        model.to(device)
+    
+    
     # train model
     logger.debug("start training")
-    train(X_train, y_train)
+    train(X_train, y_train, model)
     logger.debug("end training")
     
     # testing the result
