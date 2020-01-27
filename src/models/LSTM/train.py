@@ -84,16 +84,16 @@ def train(X_train, y_train, model, epoches=10):
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.Adagrad(model.parameters(), lr=0.01)
 
-    batched_training_data = []
+#     batched_training_data = []
     loss_track = []
-    # separate data to each batch
-    #for idx in range(len(X_train) // kwargs["batch_size"] + 1):
-    #    X_batch = X_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]
-    #    y_data = torch.tensor(np.array([y for y in 
-    #                y_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]]))
-    #    if not len(y_data):
-    #        continue
-    #    batched_training_data.append((X_batch, y_data))
+#     separate data to each batch
+#     for idx in range(len(X_train) // kwargs["batch_size"] + 1):
+#        X_batch = X_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]
+#        y_data = torch.tensor(np.array([y for y in 
+#                    y_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]]))
+#        if not len(y_data):
+#            continue
+#        batched_training_data.append((X_batch, y_data))
 
     model.zero_grad()
     for epoch in range(epoches):
@@ -105,14 +105,12 @@ def train(X_train, y_train, model, epoches=10):
                         y_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]]))
             if not len(target):
                 continue
-        #for batch, target in batched_training_data:
+#         for batch, target in batched_training_data:
             sentence_batch = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
                                for sentence in batch]
             sentence_in = torch.stack(sentence_batch)
             tag_scores = model(sentence_in)
 
-            #labels = torch.max(target, 1)[1]
-            #loss = loss_function(tag_scores, labels.long())
             loss = loss_function(tag_scores, target)
             loss_track.append(loss)
             if idx % 100 == 0:
