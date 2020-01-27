@@ -102,7 +102,7 @@ def train(X_train, y_train, model, epoches=10):
         for batch_idx in range(len(X_train) // kwargs["batch_size"] + 1):
             batch = X_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]
             target = torch.tensor(np.array([y for y in 
-                        y_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]]))
+                        y_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]])).cuda()
             if not len(target):
                 continue
 #         for batch, target in batched_training_data:
