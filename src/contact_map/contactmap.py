@@ -59,6 +59,7 @@ if __name__ == '__main__':
             if count%10 == 0:
                 logger.debug('10 maps processed')
             count += 1
+            os.remove(pdb_path)
         except:
             logger.error('Failed for PDB code {}'.format(pdb_code))
             
