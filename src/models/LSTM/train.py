@@ -105,6 +105,7 @@ def train(X_train, y_train, model, epoches=10):
                         y_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]]))
             if not len(target):
                 continue
+            target = target.cuda()
 #         for batch, target in batched_training_data:
             sentence_batch = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
                                for sentence in batch]
