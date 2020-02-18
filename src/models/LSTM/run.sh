@@ -20,4 +20,10 @@ else
 fi
 
 module load esslurm
+
+if [[ ! -d "log" ]]
+then
+    mkdir log
+fi
+
 sbatch batch_gpu.sh
