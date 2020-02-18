@@ -11,11 +11,12 @@ class LSTMTagger(nn.Module):
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
         self.hid2hid1 = nn.Linear(hidden_dim * 2, hidden_dim * 2)
-        self.hid2hid2 = nn.Linear(hidden_dim * 2, hidden_dim)
-        self.hidden2tag = nn.Linear(hidden_dim, tagset_size)
+        self.hid2hid2 = nn.Linear(hidden_dim * 2, hidden_dim * 4)
+        self.hidden2tag = nn.Linear(hidden_dim * 4, tagset_size)
         self.dropout_layer = nn.Dropout(p=0.75)
         self.padding_idx = padding_idx
         self.softmax = nn.LogSoftmax()
+        self.relu = nn.ReLU(inplace=True)
     
     def forward(self, X):
         X_size, seq_len = X.size()
@@ -25,8 +26,8 @@ class LSTMTagger(nn.Module):
         # current we just take the last hidden state of the LSTM, later will modify to attention layer
         # we do not want to take the state for padding
         last_state = lstm_out.mean(1)
-        hidden_res = F.relu(self.hid2hid1(last_state))
-        hidden_res = F.relu(self.hid2hid2(hidden_res))
+        hidden_res = self.relu(self.hid2hid1(last_state))
+        hidden_res = self.relu(self.hid2hid2(hidden_res))
         tag_space = self.hidden2tag(hidden_res)
         tag_scores = F.log_softmax(tag_space, dim=1)
         return tag_scores

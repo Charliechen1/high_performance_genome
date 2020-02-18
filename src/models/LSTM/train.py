@@ -37,12 +37,13 @@ def parse_args(argv=None):
     parser.add_argument('-H', '--hid_dim', type=int, help='the hidden layer dimension', default=20)
     parser.add_argument('-f', '--num_of_folds', type=int, help='number of folds', default=10)
     parser.add_argument('-p', '--padding_size', type=int, help='the size of the padding', default=300)
-    parser.add_argument('-P', '--part_size', type=int, help='divide the training data into parts', default=200)
+    parser.add_argument('-b', '--batch_size', type=int, help='divide the training data into batch', default=200)
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='run in debug mode i.e. only run two batches')
     parser.add_argument('-l', '--logger', type=parse_logger, default='', help='path to logger [stdout]')
     parser.add_argument('-g', '--gpu', action='store_true', default=False, help='use GPU')
     parser.add_argument('-c', '--config', type=str, help='path of the configuration', default="../../../config/main.conf")
     parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
+    parser.add_argument('-r', '--reload', type=str, default='', help='reload from the checkpoint for training')
     
     if len(argv) == 0:
         parser.print_help()
@@ -52,7 +53,7 @@ def parse_args(argv=None):
     ret = vars(args)
     return ret
         
-def train(X_train, y_train, model, epoches, part_size, logger):
+def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=5):
     """
     The training function
     """
@@ -62,26 +63,61 @@ def train(X_train, y_train, model, epoches, part_size, logger):
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     loss_track = []
+    
+    curr_epoch = 0
+    # load model from checkpoint
+    if from_checkpoint is not None and from_checkpoint != "":
+        try:
+            # from the checkpoint filename, we can know the epoch the model is trained
+            checkpoint = torch.load(from_checkpoint)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            curr_epoch = checkpoint['epoch']
+            loss = checkpoint['loss']
 
-    model.zero_grad()
+            model.eval()
+        except:
+            logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
+            model.zero_grad()
+    else:
+        model.zero_grad()
     
     # record the total number of iterations
-    total_iters = math.ceil(len(X_train) / part_size) * epoches
+    total_iters = math.ceil(len(X_train) / batch_size) * epoches
+    batch_no = math.ceil(len(X_train) / batch_size)
+    
+    # the last batch will be used as validation
+    X_valid = X_train[batch_size * (batch_no - 1):batch_size * batch_no]
+    sentence_valid = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
+                               for sentence in X_valid]
+    sentence_valid_in = torch.stack(sentence_valid)
+            
+    y_valid = y_train[batch_size * (batch_no - 1):batch_size * batch_no]
+    target_valid = torch.tensor(np.array(y_valid)).cuda()
     
     idx = 0
-    for epoch in range(epoches):
+    for epoch in range(curr_epoch, epoches):
         logger.info(f"epoch: {epoch}")
         
-        # divide the training data into parts, or the GPU memory cannot handle that
-        for part_idx in range(len(X_train) // part_size + 1):
-            part = X_train[part_size * part_idx:part_size * (part_idx + 1)]
+        # saving checkpoints
+        if epoch % check_every == 0 and epoch > 0:
+            torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss,
+            }, f"model/model_LSTM.checkpoint_{epoch}")
+            
+        # divide the training data into batchs, or the GPU memory cannot handle that
+        for batch_idx in range(batch_no - 1):
+            batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
             target = torch.tensor(np.array([y for y in 
-                        y_train[part_size * part_idx:part_size * (part_idx + 1)]])).cuda()
+                        y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]])).cuda()
             if not len(target):
                 continue
-            sentence_part = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
-                               for sentence in part]
-            sentence_in = torch.stack(sentence_part)
+            sentence_batch = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
+                               for sentence in batch]
+            sentence_in = torch.stack(sentence_batch)
             tag_scores = model(sentence_in)
 
             loss = loss_function(tag_scores, target)
@@ -89,17 +125,23 @@ def train(X_train, y_train, model, epoches, part_size, logger):
             if idx % 100 == 0:
                 logger.info(f"iteration no: {idx}/{total_iters}")
                 
-                # look at the training accuracy of this part
+                # look at the training accuracy of this batch
                 y_pred = torch.max(tag_scores, 1)[1]
-                correct = (target.eq(y_pred.long())).sum()
-                acc = correct.to(dtype=torch.float) / float(len(target))
+                training_correct = (target.eq(y_pred.long())).sum()
+                training_acc = training_correct.to(dtype=torch.float) / float(len(target))
+                
+                y_pred_valid = torch.max(model(sentence_valid_in), 1)[1]
+                valid_correct = (target_valid.eq(y_pred_valid.long())).sum()
+                valid_acc = valid_correct.to(dtype=torch.float) / float(len(y_valid))
                 
                 logger.info(f"current loss: {loss}")
-                logger.info(f"current training correct: {correct} of {len(target)} acc: {acc:.2%}") 
+                logger.info(f"current training acc: {training_acc:.2%}") 
+                logger.info(f"current validation acc: {valid_acc:.2%}") 
                 
             loss.backward()
             optimizer.step()
             idx += 1
+            
         
     return loss_track
             
@@ -110,7 +152,8 @@ def run_serial(kwargs):
     gpu = kwargs['gpu']
     epoches = kwargs['epoches']
     num_of_folds = kwargs['num_of_folds']
-    part_size = kwargs['part_size']
+    batch_size = kwargs['batch_size']
+    from_checkpoint = kwargs['reload']
     # configuration
     conf, model_conf = load_conf(config)
     
@@ -129,6 +172,12 @@ def run_serial(kwargs):
     # as there are vocab and fams
     logger.debug("start loading data")
     X_train, X_test, y_train, y_test = load_data(conf, logger, g_pool, kwargs)
+    
+    # because the GPU Mem is not able to load all the text data
+    test_size = 2000
+    X_test = X_test[:test_size]
+    y_test = y_test[:test_size]
+    
     logger.debug("finish loading data")
     
     # get model
@@ -141,7 +190,6 @@ def run_serial(kwargs):
     
     # check device
     if gpu:
-        print(cuda_index)
         to_index = cuda_index
         if isinstance(cuda_index, list):
             to_index = cuda_index[0]
@@ -153,8 +201,17 @@ def run_serial(kwargs):
     
     # train model
     logger.debug("start training")
-    loss_track = train(X_train, y_train, model, epoches, part_size, logger)
+    loss_track = train(X_train, 
+                       y_train, 
+                       model, 
+                       epoches, 
+                       batch_size, 
+                       logger,
+                       from_checkpoint=from_checkpoint)
     logger.debug("end training")
+    
+    # save the model
+    torch.save(model, f"model/model_LSTM.final_model")
     
     # testing the result
     X_test = [prepare_sequence(sentence, g_pool['vocab'] , kwargs["padding_size"])

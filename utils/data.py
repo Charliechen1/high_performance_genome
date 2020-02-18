@@ -28,6 +28,8 @@ def load_data(conf, logger, g_pool, kwargs):
     model_conf = configparser.ConfigParser()
     model_conf.read(conf['path']['model'])
     
+    test_size = kwargs.get('test_size', 0.2)
+    
     data_partitions_dirpath = conf['path']['data_part']
     print('Available dataset partitions: ', os.listdir(data_partitions_dirpath))
 
@@ -57,7 +59,7 @@ def load_data(conf, logger, g_pool, kwargs):
     max_len = int(model_conf['Preprocess']['MaxLen'])
     X = partition['aligned_sequence'].values
     y = partition['family_id'].values
-    X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(X, y, test_size=0.25, random_state=41)
+    X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(X, y, test_size=test_size, random_state=45)
     fam_vocab = {fam: idx for idx, fam in enumerate(fams)}
     g_pool['fam_vocab'] = fam_vocab
     
