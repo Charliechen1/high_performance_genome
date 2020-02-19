@@ -5,7 +5,7 @@ then
     mkdir log
 fi
 
-nohup srun -n 1 ~/.conda/envs/hpg_gpu_env/bin/python train.py \
+srun nohup -n 1 ~/.conda/envs/hpg_gpu_env/bin/python train.py \
     --sample_rate 1 \
     --emb_dim 80 \
     --epoches 25 \
@@ -16,4 +16,4 @@ nohup srun -n 1 ~/.conda/envs/hpg_gpu_env/bin/python train.py \
     --config "../../../config/main.conf" \
     --gpu \
     --debug \
-    >> log/log_`date +"%H_%m_%d_%Y"`.txt &
+    >> log/log_`date +"%H_%m_%d_%Y"`.txt&
