@@ -53,14 +53,14 @@ def parse_args(argv=None):
     ret = vars(args)
     return ret
         
-def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=5):
+def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=3):
     """
     The training function
     """
     torch.manual_seed(1)
 
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=5e-4)
 
     loss_track = []
     
@@ -182,7 +182,8 @@ def run_serial(kwargs):
     
     # get model
     model = LSTMTagger(kwargs["emb_dim"], 
-                       kwargs["hid_dim"], 
+                       kwargs["hid_dim"],
+                       kwargs["padding_size"], 
                        len(g_pool['vocab']), 
                        len(g_pool['fams']), 
                        kwargs["num_of_folds"],

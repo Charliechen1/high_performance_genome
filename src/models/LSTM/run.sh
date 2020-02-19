@@ -19,6 +19,11 @@ else
     conda env create -f $CONF
 fi
 
-echo "Launching GPU interactive session"
 module load esslurm
-salloc -C gpu -N 1 -t 04:00:00 -c 80 --gres=gpu:8
+
+if [[ ! -d "log" ]]
+then
+    mkdir log
+fi
+
+sbatch batch_gpu.sh
