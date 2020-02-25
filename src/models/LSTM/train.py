@@ -60,7 +60,7 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
     torch.manual_seed(1)
 
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     loss_track = []
     
@@ -93,8 +93,11 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
     sentence_valid_in = torch.stack(sentence_valid)
             
     y_valid = y_train[batch_size * (batch_no - 1):batch_size * batch_no]
-    target_valid = torch.tensor(np.array(y_valid)).cuda()
-    
+    if g_pool['gpu']:
+        target_valid = torch.tensor(np.array(y_valid)).cuda()
+    else:
+        target_valid = torch.tensor(np.array(y_valid))
+        
     idx = 0
     for epoch in range(curr_epoch, epoches):
         logger.info(f"epoch: {epoch}")
@@ -111,8 +114,13 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
         # divide the training data into batchs, or the GPU memory cannot handle that
         for batch_idx in range(batch_no - 1):
             batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
-            target = torch.tensor(np.array([y for y in 
-                        y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]])).cuda()
+            if g_pool['gpu']:
+                target = torch.tensor(np.array([y for y in 
+                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]])).cuda()
+            else:
+                target = torch.tensor(np.array([y for y in 
+                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]]))
+                
             if not len(target):
                 continue
             sentence_batch = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
@@ -156,6 +164,8 @@ def run_serial(kwargs):
     from_checkpoint = kwargs['reload']
     # configuration
     conf, model_conf = load_conf(config)
+    
+    g_pool['gpu'] = gpu
     
     # prepare logging
     logger = kwargs["logger"]
