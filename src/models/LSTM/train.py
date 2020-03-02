@@ -44,6 +44,7 @@ def parse_args(argv=None):
     parser.add_argument('-c', '--config', type=str, help='path of the configuration', default="../../../config/main.conf")
     parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
     parser.add_argument('-r', '--reload', type=str, default='', help='reload from the checkpoint for training')
+    parser.add_argument('-L', '--learning rate', type=float, default=1e-4, help='learning rate of the model')
     
     if len(argv) == 0:
         parser.print_help()
@@ -162,6 +163,7 @@ def run_serial(kwargs):
     num_of_folds = kwargs['num_of_folds']
     batch_size = kwargs['batch_size']
     from_checkpoint = kwargs['reload']
+    lr = kwargs['learning_rate']
     # configuration
     conf, model_conf = load_conf(config)
     
@@ -218,7 +220,8 @@ def run_serial(kwargs):
                        epoches, 
                        batch_size, 
                        logger,
-                       from_checkpoint=from_checkpoint)
+                       from_checkpoint=from_checkpoint,
+                       lr = lr)
     logger.debug("end training")
     
     # save the model
