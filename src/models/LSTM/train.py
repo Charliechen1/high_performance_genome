@@ -53,14 +53,14 @@ def parse_args(argv=None):
     ret = vars(args)
     return ret
         
-def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=3):
+def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=3, lr=1e-4):
     """
     The training function
     """
     torch.manual_seed(1)
 
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     loss_track = []
     

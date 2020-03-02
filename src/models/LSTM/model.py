@@ -15,11 +15,11 @@ class LSTMTagger(nn.Module):
         self.hid2hid = nn.Linear(hidden_dim * 2, hidden_dim * 2)
         
         # attention related layers
-        self.Wq = nn.Linear(seq_len, 1)
-        self.Wk = nn.Linear(seq_len, 1)
-        self.Wv = nn.Linear(seq_len, 1)
+        # self.Wq = nn.Linear(seq_len, 1)
+        # self.Wk = nn.Linear(seq_len, 1)
+        # self.Wv = nn.Linear(seq_len, 1)
         
-        # self.attn = nn.Linear(seq_len, 1)
+        self.attn = nn.Linear(seq_len, 1)
         
         self.hidden2tag = nn.Linear(hidden_dim * 2, tagset_size)
         self.dropout_layer = nn.Dropout(p=0.75)
@@ -31,7 +31,7 @@ class LSTMTagger(nn.Module):
         X_size, seq_len = X.size()
         embeds = self.word_embeddings(X)
         lstm_hid, _ = self.lstm(embeds.view(X_size, seq_len, -1))
-        lstm_hid = lstm_hid.view(X_size, seq_len, -1)
+        lstm_hid = lstm_hid.transpose(1, 2)
         
         # take self-attention on the hidden states of the LSTM model
         # start attention layer
@@ -41,12 +41,12 @@ class LSTMTagger(nn.Module):
         ####################################
         
         ###### naive attention version #####
-        # attn_out = self.attn(lstm_hid).view(X_size, self.hidden_dim * 2)
+        attn_out = self.attn(lstm_hid)
+        attn_out = attn_out.view(X_size, self.hidden_dim * 2)
         ####################################
         
         ###### self attention version ######
-        lstm_hid = lstm_hid.transpose(1, 2)
-        
+        """
         Q = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2)
         K = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2)
         V = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2)
@@ -54,6 +54,7 @@ class LSTMTagger(nn.Module):
         K_norm = F.normalize(K, p=2, dim=1)
         attn = torch.matmul(Q, K_norm.transpose(0, 1))
         attn_out = torch.matmul(attn, V)
+        """
         ####################################
         
         # linear transformation and classification layer
