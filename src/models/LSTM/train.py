@@ -79,10 +79,7 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
             model.eval()
         except:
             logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
-            model.zero_grad()
-    else:
-        model.zero_grad()
-    
+        
     # record the total number of iterations
     total_iters = math.ceil(len(X_train) / batch_size) * epoches
     batch_no = math.ceil(len(X_train) / batch_size)
@@ -114,6 +111,7 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
             
         # divide the training data into batchs, or the GPU memory cannot handle that
         for batch_idx in range(batch_no - 1):
+            model.zero_grad()
             batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
             if g_pool['gpu']:
                 target = torch.tensor(np.array([y for y in 
