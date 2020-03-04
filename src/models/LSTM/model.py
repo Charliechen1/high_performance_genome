@@ -62,7 +62,7 @@ class LSTMTagger(nn.Module):
             attn_out = torch.matmul(attn, V)
         ####################################
         else:
-            attn_out = lstm_hid.mean(1)
+            attn_out = lstm_hid.mean(2)
         # linear transformation and classification layer
         hidden_res = self.relu(self.hid2hid(attn_out))
         tag_space = self.hidden2tag(hidden_res)

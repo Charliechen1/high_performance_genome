@@ -20,7 +20,7 @@ def prepare_sequence(seq, vocab, padding):
     idxs = [vocab[w] for w in res]
     return torch.tensor(idxs, dtype=torch.long)
 
-def load_data(conf, logger, g_pool, kwargs):
+def load_data(conf, logger, g_pool):
     """
     function to load data
     """
@@ -28,7 +28,8 @@ def load_data(conf, logger, g_pool, kwargs):
     model_conf = configparser.ConfigParser()
     model_conf.read(conf['path']['model'])
     
-    test_size = kwargs.get('test_size', 0.2)
+    test_size = float(model_conf['Training']['TestRate'])
+    sample_every = int(model_conf['Training']["SampleEvery"])
     
     data_partitions_dirpath = conf['path']['data_part']
     print('Available dataset partitions: ', os.listdir(data_partitions_dirpath))
@@ -53,7 +54,7 @@ def load_data(conf, logger, g_pool, kwargs):
     with open(vocab_path, 'r') as of:
         vocab = json.load(of)
     g_pool['vocab'] = vocab
-    fams = np.array(train["family_id"].value_counts().index)[::kwargs["sample_rate"]]
+    fams = np.array(train["family_id"].value_counts().index)[::sample_every]
     g_pool['fams'] = fams
     partition = train[train["family_id"].isin(fams)]
     max_len = int(model_conf['Preprocess']['MaxLen'])
