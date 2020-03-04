@@ -5,20 +5,28 @@ import numpy as np
 
 class LSTMTagger(nn.Module):
 
-    def __init__(self, embedding_dim, hidden_dim, seq_len, vocab_size, tagset_size, padding_idx=0, d_k=64, num_of_header=2):
+    def __init__(self, embedding_dim, 
+                 hidden_dim, 
+                 seq_len, 
+                 vocab_size, 
+                 tagset_size, 
+                 padding_idx=0, 
+                 d_k=64, 
+                 n_layers=3, 
+                 n_headers=12):
         super(LSTMTagger, self).__init__()
         self.hidden_dim = hidden_dim
         self.d_k = d_k
-        self.num_of_header = num_of_header
+        self.n_headers = n_headers
         
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=1)
-        self.hid2hid = nn.Linear(hidden_dim * 2 * num_of_header, hidden_dim * 2)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=n_layers)
+        self.hid2hid = nn.Linear(hidden_dim * 2 * n_headers, hidden_dim * 2)
         
         # attention related layers
-        self.Wq = nn.Linear(seq_len, num_of_header)
-        self.Wk = nn.Linear(seq_len, num_of_header)
-        self.Wv = nn.Linear(seq_len, num_of_header)
+        self.Wq = nn.Linear(seq_len, n_headers)
+        self.Wk = nn.Linear(seq_len, n_headers)
+        self.Wv = nn.Linear(seq_len, n_headers)
         
         #self.attn = nn.Linear(seq_len, 1)
         
@@ -48,9 +56,9 @@ class LSTMTagger(nn.Module):
         
         ###### self attention version ######
         
-        Q = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.num_of_header)
-        K = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.num_of_header)
-        V = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.num_of_header)
+        Q = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.n_headers)
+        K = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.n_headers)
+        V = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.n_headers)
         
         K_norm = F.normalize(K, p=2, dim=1)
         #K_norm = K / torch.sqrt(torch.Tensor(self.d_k))

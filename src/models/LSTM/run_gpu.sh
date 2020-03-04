@@ -8,7 +8,7 @@ fi
 srun -n 1 nohup ~/.conda/envs/hpg_gpu_env/bin/python train.py \
     --sample_rate 1 \
     --emb_dim 80 \
-    --epoches 5 \
+    --epoches 3 \
     --hid_dim 200 \
     --num_of_folds 10 \
     --padding_size 2000 \
@@ -17,4 +17,6 @@ srun -n 1 nohup ~/.conda/envs/hpg_gpu_env/bin/python train.py \
     --gpu \
     --debug \
     --learning_rate 0.001 \
-    >> log/log_`date +"%H_%m_%d_%Y"`.txt&
+    --n_layers 3 \
+    --n_headers 2 \
+    > log/log_`date +"%H_%m_%d_%Y"`.txt&

@@ -45,6 +45,8 @@ def parse_args(argv=None):
     parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
     parser.add_argument('-r', '--reload', type=str, default='', help='reload from the checkpoint for training')
     parser.add_argument('-L', '--learning_rate', type=float, default=1e-4, help='learning rate of the model')
+    parser.add_argument('-y', '--n_layers', type=int, default=3, help='number of self attention headers')
+    parser.add_argument('-a', '--n_headers', type=int, default=12, help='number of self attention headers')
     
     if len(argv) == 0:
         parser.print_help()
@@ -54,7 +56,7 @@ def parse_args(argv=None):
     ret = vars(args)
     return ret
         
-def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=3, lr=1e-4):
+def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=None, check_every=1, lr=1e-4):
     """
     The training function
     """
@@ -149,7 +151,14 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
             optimizer.step()
             idx += 1
             
-        
+    # save the model
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss,
+    }, f"model/model_LSTM.final_model")
+    
     return loss_track
             
 def run_serial(kwargs):
@@ -162,6 +171,8 @@ def run_serial(kwargs):
     batch_size = kwargs['batch_size']
     from_checkpoint = kwargs['reload']
     lr = kwargs['learning_rate']
+    n_layers = kwargs['n_layers']
+    n_headers = kwargs['n_headers']
     # configuration
     conf, model_conf = load_conf(config)
     
@@ -197,6 +208,8 @@ def run_serial(kwargs):
                        len(g_pool['vocab']), 
                        len(g_pool['fams']), 
                        kwargs["num_of_folds"],
+                       n_layers=n_layers,
+                       n_headers=n_headers,
                       )
     
     # check device
@@ -221,9 +234,6 @@ def run_serial(kwargs):
                        from_checkpoint=from_checkpoint,
                        lr = lr)
     logger.debug("end training")
-    
-    # save the model
-    torch.save(model, f"model/model_LSTM.final_model")
     
     # testing the result
     X_test = [prepare_sequence(sentence, g_pool['vocab'] , kwargs["padding_size"])
