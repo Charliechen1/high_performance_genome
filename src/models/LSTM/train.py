@@ -99,7 +99,7 @@ def train(X_train, y_train, model, epoches, batch_size, logger, from_checkpoint=
         target_valid = torch.tensor(np.array(y_valid))
         
     idx = 0
-    for epoch in range(curr_epoch, epoches):
+    for epoch in range(curr_epoch, epoches - 1):
         logger.info(f"epoch: {epoch}")
         
         # saving checkpoints
@@ -195,9 +195,10 @@ def run_serial(kwargs):
     X_train, X_test, y_train, y_test = load_data(conf, logger, g_pool, kwargs)
     
     # because the GPU Mem is not able to load all the text data
-    test_size = 2000
-    X_test = X_test[:test_size]
-    y_test = y_test[:test_size]
+    test_size = 1000
+    text_idx = np.random.choice(len(X_test), test_size)
+    X_test = X_test[text_idx]
+    y_test = y_test[text_idx]
     
     logger.debug("finish loading data")
     
@@ -210,6 +211,7 @@ def run_serial(kwargs):
                        kwargs["num_of_folds"],
                        n_layers=n_layers,
                        n_headers=n_headers,
+                       need_attn=True,
                       )
     
     # check device
@@ -242,7 +244,7 @@ def run_serial(kwargs):
     score_pred = model(X_test)
     y_pred = np.array(torch.max(score_pred, 1)[1].tolist())
     acc = sum(y_test == y_pred) / len(y_test)
-    logger.info(f"The final accuracy is {acc}")
+    logger.info(f"The final accuracy is {acc:.2%}")
 
 if __name__ == '__main__':
     kwargs = parse_args()
