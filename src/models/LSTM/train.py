@@ -192,8 +192,8 @@ def run_serial(kwargs):
         logger.setLevel(logging.INFO)
     if debug:
         logger.setLevel(logging.DEBUG)
-    logger.info("The arguments are: %s", kwargs)
-    logger.info("The configuration are: %s", model_conf._sections)
+    #logger.info("The arguments are: %s", kwargs)
+    logger.info("The configuration are: %s", json.dumps(model_conf._sections))
     
     # load data
     # data should be load before model
