@@ -49,7 +49,6 @@ class LSTMTagger(nn.Module):
         # take self-attention on the hidden states of the LSTM model
         # start attention layer
         
-        
         ###### self attention version ######
         if self.need_attn:
             Q = self.Wq(lstm_hid).view(X_size, self.hidden_dim * 2 * self.n_headers)
@@ -62,7 +61,8 @@ class LSTMTagger(nn.Module):
             attn_out = torch.matmul(attn, V)
         ####################################
         else:
-            attn_out = lstm_hid.mean(2)
+            # default, take the last layer as output of LSTM
+            attn_out = lstm_hid[:, :, -1]
         # linear transformation and classification layer
         hidden_res = self.relu(self.hid2hid(attn_out))
         tag_space = self.hidden2tag(hidden_res)

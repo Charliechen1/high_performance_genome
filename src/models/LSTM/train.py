@@ -181,6 +181,7 @@ def run_serial(kwargs):
     lr = float(model_conf['Params']['Learning_rate'])
     n_layers = int(model_conf['Params']['NLayers'])
     n_headers = int(model_conf['Params']['NHeaders'])
+    need_attn = bool(int(model_conf['Params']['NeedAttn']))
     
     g_pool['gpu'] = gpu
     
@@ -217,7 +218,7 @@ def run_serial(kwargs):
                      tagset_size=len(g_pool['fams']),
                      n_layers=n_layers, 
                      n_headers=n_headers,
-                     need_attn=True)
+                     need_attn=need_attn)
     
     # check device
     if gpu:
