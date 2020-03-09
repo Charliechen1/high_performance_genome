@@ -44,7 +44,9 @@ def parse_args(argv=None):
     return ret
         
 def train(X_train, 
-          y_train, 
+          y_train,
+          X_valid,
+          y_valid,
           model, 
           epochs, 
           batch_size, 
@@ -82,13 +84,11 @@ def train(X_train,
     total_iters = math.ceil(len(X_train) / batch_size) * epochs
     batch_no = math.ceil(len(X_train) / batch_size)
     
-    # the last batch will be used as validation
-    X_valid = X_train[batch_size * (batch_no - 1):batch_size * batch_no]
+    # process validation set
     sentence_valid = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
                                for sentence in X_valid]
     sentence_valid_in = torch.stack(sentence_valid)
             
-    y_valid = y_train[batch_size * (batch_no - 1):batch_size * batch_no]
     if g_pool['gpu']:
         target_valid = torch.tensor(np.array(y_valid)).cuda()
     else:
@@ -203,6 +203,11 @@ def run_serial(kwargs):
     X_train, X_test, y_train, y_test = load_data(conf, logger, g_pool)
     
     # because the GPU Mem is not able to load all the text data
+    valid_size = 500
+    valid_idx = np.random.choice(len(X_test), valid_size)
+    X_valid = X_test[valid_idx]
+    y_valid = y_test[valid_idx]
+    
     test_size = 1000
     text_idx = np.random.choice(len(X_test), test_size)
     X_test = X_test[text_idx]
@@ -234,7 +239,9 @@ def run_serial(kwargs):
     # train model
     logger.debug("start training")
     loss_track = train(X_train, 
-                       y_train, 
+                       y_train,
+                       X_valid,
+                       y_valid,
                        model, 
                        epochs, 
                        batch_size, 
