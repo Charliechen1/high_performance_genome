@@ -1,0 +1,234 @@
+
+
+
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="utf-8">
+
+    <title>JupyterHub</title>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    
+    <link rel="stylesheet" href="/hub/static/css/style.min.css?v=ab35cbd1a6857ec00620a56c43760477" type="text/css"/>
+    
+    <script src="/hub/static/components/requirejs/require.js?v=f0cc8bbb2fcef87fc194fecbb632fcfa" type="text/javascript" charset="utf-8"></script>
+    <script src="/hub/static/components/jquery/dist/jquery.min.js?v=220afd743d9e9643852e31a135a9f3ae" type="text/javascript" charset="utf-8"></script>
+    <script src="/hub/static/components/bootstrap/dist/js/bootstrap.min.js?v=2f34b630ffe30ba2ff2b91e3f3c322a1" type="text/javascript" charset="utf-8"></script>
+    <script>
+      require.config({
+          
+          urlArgs: "v=20200302192449",
+          
+          baseUrl: '/hub/static/js',
+          paths: {
+            components: '../components',
+            jquery: '../components/jquery/dist/jquery.min',
+            bootstrap: '../components/bootstrap/dist/js/bootstrap.min',
+            moment: "../components/moment/moment",
+          },
+          shim: {
+            bootstrap: {
+              deps: ["jquery"],
+              exports: "bootstrap"
+            },
+          }
+      });
+    </script>
+
+    <script type="text/javascript">
+      window.jhdata = {
+        base_url: "/hub/",
+        prefix: "/",
+        
+        
+        admin_access: false,
+        
+        
+        options_form: false,
+        
+      }
+    </script>
+
+    
+    
+
+</head>
+
+<body>
+
+<noscript>
+  <div id='noscript'>
+    JupyterHub requires JavaScript.<br>
+    Please enable it to proceed.
+  </div>
+</noscript>
+
+
+  <nav class="navbar navbar-default">
+    <div class="container-fluid">
+      <div class="navbar-header">
+        
+        <span id="jupyterhub-logo" class="pull-left">
+            <a href="/hub/"><img src='/hub/logo' alt='JupyterHub' class='jpy-logo' title='Home'/></a>
+        </span>
+        
+        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#thenavbar" aria-expanded="false">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+      </div>
+
+      <div class="collapse navbar-collapse" id="thenavbar">
+        
+        <ul class="nav navbar-nav navbar-right">
+          
+            <li>
+              
+
+            </li>
+          
+        </ul>
+      </div>
+
+      
+      
+    </div>
+  </nav>
+
+
+
+
+<div class="container announcement">
+</div>
+
+
+
+
+
+
+<div id="login-main" class="container">
+
+<form action="/hub/login?next=%2Fhub%2Fapi%2Foauth2%2Fauthorize%3Fclient_id%3Djupyterhub-user-j_chen-cori-shared-node-cpu%26redirect_uri%3D%252Fuser%252Fj_chen%252Fcori-shared-node-cpu%252Foauth_callback%26response_type%3Dcode%26state%3DeyJ1dWlkIjogIjliYmU4YTgyM2JiNjQ4NTZiY2I1ZGI5OTFjZGFiZjNiIiwgIm5leHRfdXJsIjogIi91c2VyL2pfY2hlbi9jb3JpLXNoYXJlZC1ub2RlLWNwdS9sYWIvdHJlZS9nbG9iYWwvaG9tZXMvai9qX2NoZW4vY2Fwc3RvbmUvaGlnaF9wZXJmb3JtYW5jZV9nZW5vbWUvc3JjL21vZGVscy9MU1RNL21vZGVsL21vZGVsX0xTVE0uZmluYWxfbW9kZWwifQ" method="post" role="form">
+  <div class="auth-form-header">
+    Sign in
+  </div>
+  <div class='auth-form-body'>
+
+    <p id='insecure-login-warning' class='hidden'>
+    Warning: JupyterHub seems to be served over an unsecured HTTP connection.
+    We strongly recommend enabling HTTPS for JupyterHub.
+    </p>
+
+    
+    <label for="username_input">Username:</label>
+    <input
+      id="username_input"
+      type="text"
+      autocapitalize="off"
+      autocorrect="off"
+      class="form-control"
+      name="username"
+      val=""
+      tabindex="1"
+      autofocus="autofocus"
+    />
+    <label for='password_prefix_input'>Password:</label>
+    <input
+      type="password"
+      class="form-control"
+      name="password_prefix"
+      id="password_prefix_input"
+      tabindex="2"
+    />
+    <label for='mfa_input'>OTP:</label>
+    <input
+      type="text"
+      class="form-control"
+      name="mfa"
+      id="mfa_input"
+      tabindex="3"
+      autocomplete="off"
+    />
+    <input type="hidden" id="password_input" name="password">
+
+    <input
+      type="submit"
+      id="login_submit"
+      class='btn btn-jupyter'
+      value='Sign In'
+      tabindex="4"
+    />
+  </div>
+</form>
+
+</div>
+
+
+
+
+
+
+
+<div class="modal fade" id="error-dialog" tabindex="-1" role="dialog" aria-labelledby="error-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+        <h4 class="modal-title" id="error-label">Error</h4>
+      </div>
+      <div class="modal-body">
+        
+  <div class="ajax-error">
+    The error
+  </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" data-dismiss="modal" data-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+<script>
+$.get("/services/announcement/latest", function(data) {
+    var announcement = data["announcement"];
+    if(announcement) {
+        $(".announcement").html(
+            `<div class="container text-center announcement alert alert-warning">
+                ${announcement}
+            </div>`
+        );
+    }
+});
+</script>
+
+<script>
+if (window.location.protocol === "http:") {
+  // unhide http warning
+  var warning = document.getElementById('insecure-login-warning');
+  warning.className = warning.className.replace(/\bhidden\b/, '');
+}
+</script>
+<script>
+$('form').submit(function() {
+    $("#password_input").val($("#password_prefix_input").val() + $("#mfa_input").val());
+});
+</script>
+
+
+
+</body>
+
+</html>
