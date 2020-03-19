@@ -9,23 +9,19 @@ import sys, os
 import pandas as pd
 import json
 import numpy as np
+import math
 
 import torch.nn as nn
 import torch.optim as optim
 
+sys.path.append("../../../utils/")
+
+from data import *
+from args import *
+from conf import *
+
 # define global variables
 g_pool = {}
-def parse_logger(string):
-    if not string:
-        ret = logging.getLogger('stdout')
-        hdlr = logging.StreamHandler(sys.stdout)
-    else:
-        ret = logging.getLogger(string)
-        hdlr = logging.FileHandler(string)
-    ret.setLevel(logging.INFO)
-    ret.addHandler(hdlr)
-    hdlr.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-    return ret
 
 def parse_args(argv=None):
     """
@@ -35,14 +31,7 @@ def parse_args(argv=None):
         argv = sys.argv[1:]
        
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--sample_rate', type=int, help='rate of sampling', default=1)
-    parser.add_argument('-e', '--emb_dim', type=int, help='the embedding dimension', default=30)
-    parser.add_argument('-H', '--hid_dim', type=int, help='the hidden layer dimension', default=20)
-    parser.add_argument('-b', '--batch_size', type=int, help='the size of the batch', default=128)
-    parser.add_argument('-p', '--padding_size', type=int, help='the size of the padding', default=300)
-    parser.add_argument('-d', '--debug', action='store_true', default=False, help='run in debug mode i.e. only run two batches')
     parser.add_argument('-l', '--logger', type=parse_logger, default='', help='path to logger [stdout]')
-    parser.add_argument('-g', '--gpu', action='store_true', default=False, help='use GPU')
     parser.add_argument('-c', '--config', type=str, help='path of the configuration', default="../../../config/main.conf")
     parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
     
@@ -53,60 +42,85 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
     ret = vars(args)
     return ret
-
-def _parse_cuda_index_helper(s):
-    try:
-        i = int(s)
-        if i > torch.cuda.device_count() or i < 0:
-            raise ValueError(s)
-        return i
-    except :
-        devices = str(np.arange(torch.cuda.device_count()))
-        raise argparse.ArgumentTypeError(f'{s} is not a valid CUDA index. Please choose from {devices}')
         
-        
-def parse_cuda_index(string):
-    if string == 'all':
-        return list(range(torch.cuda.device_count()))
-    else:
-        if ',' in string:
-            return [_parse_cuda_index_helper(_) for _ in string.split(',')]
-        else:
-            return _parse_cuda_index_helper(string)
-        
-        
-def train(X_train, y_train, model, epoches=10):
+def train(X_train, 
+          y_train,
+          X_valid,
+          y_valid,
+          model, 
+          epochs, 
+          batch_size, 
+          logger, 
+          from_checkpoint=None, 
+          check_every=1, 
+          lr=1e-4,
+          padding_size=3000):
     """
     The training function
     """
     torch.manual_seed(1)
 
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adagrad(model.parameters(), lr=0.01)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
-#     batched_training_data = []
     loss_track = []
-#     separate data to each batch
-#     for idx in range(len(X_train) // kwargs["batch_size"] + 1):
-#        X_batch = X_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]
-#        y_data = torch.tensor(np.array([y for y in 
-#                    y_train[kwargs["batch_size"] * idx:kwargs["batch_size"] * (idx + 1)]]))
-#        if not len(y_data):
-#            continue
-#        batched_training_data.append((X_batch, y_data))
+    
+    curr_epoch = 0
+    # load model from checkpoint
+    if from_checkpoint is not None and from_checkpoint != "":
+        try:
+            # from the checkpoint filename, we can know the epoch the model is trained
+            checkpoint = torch.load(from_checkpoint)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            curr_epoch = checkpoint['epoch']
+            loss = checkpoint['loss']
 
-    model.zero_grad()
-    for epoch in range(epoches):
-        logger.debug("epoch: %d" % epoch)
-        idx = 0
-        for batch_idx in range(len(X_train) // kwargs["batch_size"] + 1):
-            batch = X_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]
-            target = torch.tensor(np.array([y for y in 
-                        y_train[kwargs["batch_size"] * batch_idx:kwargs["batch_size"] * (batch_idx + 1)]])).cuda()
+            model.eval()
+        except:
+            logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
+        
+    # record the total number of iterations
+    total_iters = math.ceil(len(X_train) / batch_size) * epochs
+    batch_no = math.ceil(len(X_train) / batch_size)
+    
+    # process validation set
+    sentence_valid = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
+                               for sentence in X_valid]
+    sentence_valid_in = torch.stack(sentence_valid)
+            
+    if g_pool['gpu']:
+        target_valid = torch.tensor(np.array(y_valid)).cuda()
+    else:
+        target_valid = torch.tensor(np.array(y_valid))
+        
+    idx = 0
+    for epoch in range(curr_epoch, epochs):
+        logger.info(f"epoch: {epoch}")
+        
+        # saving checkpoints
+        if epoch % check_every == 0 and epoch > 0:
+            torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss,
+            }, f"model/model_LSTM.checkpoint_{epoch}")
+            
+        # divide the training data into batchs, or the GPU memory cannot handle that
+        for batch_idx in range(batch_no - 1):
+            model.zero_grad()
+            batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
+            if g_pool['gpu']:
+                target = torch.tensor(np.array([y for y in 
+                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]])).cuda()
+            else:
+                target = torch.tensor(np.array([y for y in 
+                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]]))
+                
             if not len(target):
                 continue
-#         for batch, target in batched_training_data:
-            sentence_batch = [prepare_sequence(sentence, g_pool['vocab'] , kwargs['padding_size'])
+            sentence_batch = [prepare_sequence(sentence, g_pool['vocab'], padding_size)
                                for sentence in batch]
             sentence_in = torch.stack(sentence_batch)
             tag_scores = model(sentence_in)
@@ -114,113 +128,105 @@ def train(X_train, y_train, model, epoches=10):
             loss = loss_function(tag_scores, target)
             loss_track.append(loss)
             if idx % 100 == 0:
-                logger.debug("batch no: %d" % idx)
-                logger.debug("loss: %f" % loss)
+                logger.info(f"iteration no: {idx}/{total_iters}")
+                
+                # look at the training accuracy of this batch
+                y_pred = torch.max(tag_scores, 1)[1]
+                training_correct = (target.eq(y_pred.long())).sum()
+                training_acc = training_correct.to(dtype=torch.float) / float(len(target))
+                
+                y_pred_valid = torch.max(model(sentence_valid_in), 1)[1]
+                valid_correct = (target_valid.eq(y_pred_valid.long())).sum()
+                valid_acc = valid_correct.to(dtype=torch.float) / float(len(y_valid))
+                
+                logger.info(f"current loss: {loss}")
+                logger.info(f"current training acc: {training_acc:.2%}") 
+                logger.info(f"current validation acc: {valid_acc:.2%}") 
+                
             loss.backward()
             optimizer.step()
             idx += 1
             
-def load_conf(config_path):
-    """
-    function to load the global configuration
-    """
-    global conf, model_conf
-    conf = configparser.ConfigParser()
-    conf.read(config_path)
-    print(conf)
+    # save the model
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss,
+    }, f"model/model_LSTM.final_model")
+    
+    return loss_track
             
-    model_conf = configparser.ConfigParser()
-    model_conf.read(conf['path']['model'])
-    
-def prepare_sequence(seq, vocab, padding):
-    """
-    function to process the data, padding them
-    TODO later will move to specific preprocessing part
-    """
-    res = ['<PAD>'] * padding
-    res[:min(padding, len(seq))] = seq[:min(padding, len(seq))]
-    # use 0 for padding
-    idxs = [vocab[w] for w in res]
-    return torch.tensor(idxs, dtype=torch.long)
-
-def load_data():
-    """
-    function to load data
-    """
-    data_partitions_dirpath = conf['path']['data_part']
-    print('Available dataset partitions: ', os.listdir(data_partitions_dirpath))
-
-    def read_all_shards(partition='dev', data_dir=data_partitions_dirpath):
-        shards = []
-        for fn in os.listdir(os.path.join(data_dir, partition)):
-            with open(os.path.join(data_dir, partition, fn)) as f:
-                shards.append(pd.read_csv(f, index_col=None))
-        return pd.concat(shards)
-
-    test = read_all_shards('test')
-    dev = read_all_shards('dev')
-    train = read_all_shards('train')
-
-    partitions = {'test': test, 'dev': dev, 'train': train}
-    for name, df in partitions.items():
-        logger.info('Dataset partition "%s" has %d sequences' % (name, len(df)))
-
-    # load vocab
-    vocab_path = conf['path']['vocab']
-    with open(vocab_path, 'r') as of:
-        vocab = json.load(of)
-    g_pool['vocab'] = vocab
-    fams = np.array(train["family_id"].value_counts().index)[::kwargs["sample_rate"]]
-    g_pool['fams'] = fams
-    partition = train[train["family_id"].isin(fams)]
-    max_len = int(model_conf['Preprocess']['MaxLen'])
-    X = partition['aligned_sequence'].values
-    y = partition['family_id'].values
-    X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(X, y, test_size=0.25, random_state=41)
-    fam_vocab = {fam: idx for idx, fam in enumerate(fams)}
-    
-    y_train = np.array([fam_vocab[y] for y in y_train_raw])
-    y_test = np.array([fam_vocab[y] for y in y_test_raw])
-    return X_train_raw, X_test_raw, y_train, y_test
-
-def run_serial():
+def run_serial(kwargs):
     config = kwargs['config']
-    cuda_index = kwargs['cuda_index']
-    debug = kwargs['debug']
-    gpu = kwargs['gpu']
-    cuda_index = kwargs['cuda_index']
     
     # configuration
-    load_conf(config)
+    conf, model_conf = load_conf(config)
+    
+    cuda_index = kwargs['cuda_index']
+    debug = bool(model_conf['Basic']['Debug'])
+    
+    gpu = bool(int(model_conf['Device']['Gpu']))
+    
+    from_checkpoint = model_conf['Training']['Reload']
+    from_checkpoint = None if from_checkpoint == 'None' else from_checkpoint
+    
+    epochs = int(model_conf['Training']['Epochs'])
+    
+    emb_dim = int(model_conf['Params']['EmbDim'])
+    hid_dim = int(model_conf['Params']['HidDim'])
+    num_of_folds = int(model_conf['Params']['NumOfFolds'])
+    padding_size = int(model_conf['Params']['PaddingSize'])
+    batch_size = int(model_conf['Params']['BatchSize'])
+    lr = float(model_conf['Params']['Learning_rate'])
+    n_layers = int(model_conf['Params']['NLayers'])
+    n_headers = int(model_conf['Params']['NHeaders'])
+    need_attn = bool(int(model_conf['Params']['NeedAttn']))
+    
+    g_pool['gpu'] = gpu
     
     # prepare logging
-    global logger
     logger = kwargs["logger"]
     
     if logger is None:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
-    if kwargs["debug"]:
+    if debug:
         logger.setLevel(logging.DEBUG)
-    logger.info("The arguments are: %s", kwargs)
+    #logger.info("The arguments are: %s", kwargs)
+    logger.info("The configuration are: %s", json.dumps(model_conf._sections))
     
     # load data
     # data should be load before model
     # as there are vocab and fams
     logger.debug("start loading data")
-    X_train, X_test, y_train, y_test = load_data()
+    X_train, X_test, y_train, y_test = load_data(conf, logger, g_pool)
+    
+    # because the GPU Mem is not able to load all the text data
+    valid_size = 500
+    valid_idx = np.random.choice(len(X_test), valid_size)
+    X_valid = X_test[valid_idx]
+    y_valid = y_test[valid_idx]
+    
+    test_size = 1000
+    text_idx = np.random.choice(len(X_test), test_size)
+    X_test = X_test[text_idx]
+    y_test = y_test[text_idx]
+    
     logger.debug("finish loading data")
     
     # get model
-    model = LSTMTagger(kwargs["emb_dim"], 
-                       kwargs["hid_dim"], 
-                       len(g_pool['vocab']), 
-                       len(g_pool['fams']), 
-                       kwargs["batch_size"])
+    model = LSTMTagger(embedding_dim=emb_dim, 
+                     hidden_dim=hid_dim, 
+                     seq_len=padding_size, 
+                     vocab_size=len(g_pool['vocab']),
+                     tagset_size=len(g_pool['fams']),
+                     n_layers=n_layers, 
+                     n_headers=n_headers,
+                     need_attn=need_attn)
     
     # check device
     if gpu:
-        print(cuda_index)
         to_index = cuda_index
         if isinstance(cuda_index, list):
             to_index = cuda_index[0]
@@ -230,23 +236,30 @@ def run_serial():
         logger.info(f'sending data to CUDA device {str(device)}')
         model.to(device)
     
-    
     # train model
     logger.debug("start training")
-    train(X_train, y_train, model)
+    loss_track = train(X_train, 
+                       y_train,
+                       X_valid,
+                       y_valid,
+                       model, 
+                       epochs, 
+                       batch_size, 
+                       logger,
+                       from_checkpoint=from_checkpoint,
+                       lr = lr,
+                       padding_size=padding_size)
     logger.debug("end training")
     
     # testing the result
-    X_test = [prepare_sequence(sentence, g_pool['vocab'] , kwargs["padding_size"])
-                           for sentence in X_test_raw]
+    X_test = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
+                           for sentence in X_test]
     X_test = torch.stack(X_test)
     score_pred = model(X_test)
     y_pred = np.array(torch.max(score_pred, 1)[1].tolist())
-    y_test = np.array([fam_vocab[fam] for fam in y_test_raw])
     acc = sum(y_test == y_pred) / len(y_test)
-    logger.info("The accuracy is %d" % acc)
+    logger.info(f"The final accuracy is {acc:.2%}")
 
 if __name__ == '__main__':
-    global kwargs
     kwargs = parse_args()
-    run_serial()
+    run_serial(kwargs)

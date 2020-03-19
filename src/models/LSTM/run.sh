@@ -1,11 +1,29 @@
-if [[ $1 == "--gpu" ]] || [[ $1 == "-g" ]]
+CONF="hpg_gpu_env.yml"
+
+#Check that config file exists and grab environment name
+if [ -e $CONF ]
 then
-    # gpu version execution
-    nohup /usr/common/software/pytorch/v1.2.0-gpu/bin/python train.py -s 1 -e 30 -H 30 -b 256 -p 300 -c "../../../config/main.conf" -g -d > log_`date +"%m-%d-%Y"`.txt &
-elif [[ $1 == "--cpu" ]] || [[ $1 == "-c" ]]
-then
-    # cpu version execution
-    nohup /usr/common/software/pytorch/v1.2.0/bin/python train.py -s 1 -e 30 -H 30 -b 256 -p 300 -c "../../../config/main.conf" -d > log_`date +"%m-%d-%Y"`.txt &
+    ENV=$(head -n 1 $CONF | cut -f2 -d ' ')
 else
-    echo "unknown command"
+    echo "Environment config not found"
+    exit 1
 fi
+
+#Check if environment is already installed and install if needed
+EXIST=`conda info --envs | grep $ENV | wc -l`
+if [ $EXIST == "1" ]
+then
+    echo "Environment already installed"
+else
+    echo "Installing environment"
+    conda env create -f $CONF
+fi
+
+module load esslurm
+
+if [[ ! -d "log" ]]
+then
+    mkdir log
+fi
+
+sbatch batch_gpu.sh

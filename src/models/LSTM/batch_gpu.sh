@@ -1,9 +1,9 @@
-#module load python cuda
-#module load pytorch/v1.1.0-gpu
-if [[ ! -d "log" ]]
-then
-    mkdir log
-fi
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -C gpu
+#SBATCH -t 240
+#SBATCH -c 80
+#SBATCH --gres=gpu:8
 
 srun -n 1 nohup ~/.conda/envs/hpg_gpu_env/bin/python train.py \
     --config "../../../config/main.conf" \

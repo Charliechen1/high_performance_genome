@@ -21,4 +21,4 @@ fi
 
 echo "Launching GPU interactive session"
 module load esslurm
-salloc -C gpu -N 1 -t 60 -c 10 --gres=gpu:1
+salloc -C gpu -N 1 -t 04:00:00 -c 80 --gres=gpu:8
