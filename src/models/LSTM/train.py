@@ -108,7 +108,7 @@ def train(X_train,
             }, f"model/model_LSTM.checkpoint_{epoch}")
             
         # divide the training data into batchs, or the GPU memory cannot handle that
-        for batch_idx in range(batch_no - 1):
+        for batch_idx in range(batch_no):
             model.zero_grad()
             batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
             if g_pool['gpu']:
@@ -179,8 +179,8 @@ def run_serial(kwargs):
     padding_size = int(model_conf['Params']['PaddingSize'])
     batch_size = int(model_conf['Params']['BatchSize'])
     lr = float(model_conf['Params']['Learning_rate'])
-    n_layers = int(model_conf['Params']['NLayers'])
-    n_headers = int(model_conf['Params']['NHeaders'])
+    n_lstm = int(model_conf['Params']['NLayers'])
+    n_head = int(model_conf['Params']['NHeaders'])
     need_attn = bool(int(model_conf['Params']['NeedAttn']))
     
     g_pool['gpu'] = gpu
@@ -221,8 +221,8 @@ def run_serial(kwargs):
                      seq_len=padding_size, 
                      vocab_size=len(g_pool['vocab']),
                      tagset_size=len(g_pool['fams']),
-                     n_layers=n_layers, 
-                     n_headers=n_headers,
+                     n_lstm=n_lstm, 
+                     n_head=n_head,
                      need_attn=need_attn)
     
     # check device
