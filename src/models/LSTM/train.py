@@ -162,7 +162,8 @@ def run_serial(kwargs):
     
     # configuration
     conf, model_conf = load_conf(config)
-    
+    print(config)
+    print(conf, model_conf)
     cuda_index = kwargs['cuda_index']
     debug = bool(model_conf['Basic']['Debug'])
     
