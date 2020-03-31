@@ -208,7 +208,7 @@ def run_serial(kwargs):
     X_valid = X_test[valid_idx]
     y_valid = y_test[valid_idx]
     
-    test_size = 1000
+    test_size = 500
     text_idx = np.random.choice(len(X_test), test_size)
     X_test = X_test[text_idx]
     y_test = y_test[text_idx]
