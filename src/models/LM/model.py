@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from Sublayer import MultiHeadAttention, PositionwiseFeedForward
 
-class LSTMTagger(nn.Module):
+class LSTMAttn(nn.Module):
 
     def __init__(self, embedding_dim, 
                  hidden_dim, 
@@ -16,17 +16,17 @@ class LSTMTagger(nn.Module):
                  d_v=64,
                  n_lstm=3, 
                  n_head=12,
-                 need_attn=True,
+                 n_attn=2,
                  dropout=0.1):
-        super(LSTMTagger, self).__init__()
+        super(LSTMAttn, self).__init__()
         self.hidden_dim = hidden_dim
         self.d_k = d_k
         self.n_head = n_head
-        self.need_attn = need_attn
+        self.n_attn = n_attn
         
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=n_lstm)
-        if need_attn:
+        if n_attn:
             self.hid2hid = nn.Linear(seq_len, 1)
         else:
             self.hid2hid = nn.Linear(hidden_dim * 2, hidden_dim * 2)
@@ -50,10 +50,12 @@ class LSTMTagger(nn.Module):
         # start attention layer
         
         ###### self attention version ######
-        if self.need_attn:
-            enc_out, enc_slf_attn = self.slf_attn(
-                lstm_hid, lstm_hid, lstm_hid, mask=slf_attn_mask)
-            attn_out = self.pos_ffn(enc_out)
+        if self.n_attn:
+            attn_out = lstm_hid
+            for _ in range(self.n_attn):
+                enc_out, enc_slf_attn = self.slf_attn(
+                    attn_out, attn_out, attn_out, mask=slf_attn_mask)
+                attn_out = self.pos_ffn(enc_out)
         ####################################
         else:
             # default, take the last layer as output of LSTM
@@ -66,3 +68,9 @@ class LSTMTagger(nn.Module):
         tag_space = self.hidden2tag(hidden_res)
         tag_scores = F.log_softmax(tag_space, dim=1)
         return tag_scores
+    
+class TapePretrained(nn.Module):
+    def __init__(self):
+        pass
+        
+    

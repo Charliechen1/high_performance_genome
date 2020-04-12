@@ -3,7 +3,7 @@ import argparse
 import configparser
 
 #from sklearn.model_selection import train_test_split
-from model import LSTMTagger
+from model import LSTMAttn
 import torch
 import sys, os
 import pandas as pd
@@ -181,31 +181,9 @@ def run_serial(kwargs):
     padding_size = int(model_conf['Params']['PaddingSize'])
     batch_size = int(model_conf['Params']['BatchSize'])
     lr = float(model_conf['Params']['Learning_rate'])
-    n_lstm = int(model_conf['Params']['NLayers'])
+    n_lstm = int(model_conf['Params']['NLSTM'])
     n_head = int(model_conf['Params']['NHeaders'])
-    need_attn = bool(int(model_conf['Params']['NeedAttn']))
-    
-    g_pool['gpu'] = gpu
-    
-    cuda_index = kwargs['cuda_index']
-    debug = bool(model_conf['Basic']['Debug'])
-    
-    gpu = bool(int(model_conf['Device']['Gpu']))
-    
-    from_checkpoint = model_conf['Training']['Reload']
-    from_checkpoint = None if from_checkpoint == 'None' else from_checkpoint
-    
-    epochs = int(model_conf['Training']['Epochs'])
-    
-    emb_dim = int(model_conf['Params']['EmbDim'])
-    hid_dim = int(model_conf['Params']['HidDim'])
-    num_of_folds = int(model_conf['Params']['NumOfFolds'])
-    padding_size = int(model_conf['Params']['PaddingSize'])
-    batch_size = int(model_conf['Params']['BatchSize'])
-    lr = float(model_conf['Params']['Learning_rate'])
-    n_layers = int(model_conf['Params']['NLayers'])
-    n_headers = int(model_conf['Params']['NHeaders'])
-    need_attn = bool(int(model_conf['Params']['NeedAttn']))
+    n_attn = bool(int(model_conf['Params']['NAttn']))
     
     g_pool['gpu'] = gpu
     
@@ -241,14 +219,14 @@ def run_serial(kwargs):
     logger.debug("finish loading data")
     
     # get model
-    model = LSTMTagger(embedding_dim=emb_dim, 
+    model = LSTMAttn(embedding_dim=emb_dim, 
                      hidden_dim=hid_dim, 
                      seq_len=padding_size, 
                      vocab_size=len(g_pool['vocab']),
                      tagset_size=len(g_pool['fams']),
                      n_lstm=n_lstm, 
                      n_head=n_head,
-                     need_attn=need_attn)
+                     n_attn=n_attn)
     
     # check device
     if gpu:
