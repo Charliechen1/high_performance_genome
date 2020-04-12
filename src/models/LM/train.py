@@ -54,7 +54,8 @@ def train(X_train,
           from_checkpoint=None, 
           check_every=1, 
           lr=1e-4,
-          padding_size=3000):
+          padding_size=3000,
+          no_iters=1000):
     """
     The training function
     """
@@ -81,8 +82,7 @@ def train(X_train,
             logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
         
     # record the total number of iterations
-    total_iters = math.ceil(len(X_train) / batch_size) * epochs
-    batch_no = math.ceil(len(X_train) / batch_size)
+    total_iters = no_iters * epochs
     
     # process validation set
     sentence_valid = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
@@ -108,16 +108,16 @@ def train(X_train,
             }, f"model/model_LSTM.checkpoint_{epoch}")
             
         # divide the training data into batchs, or the GPU memory cannot handle that
-        
-        for batch_idx in range(batch_no):
+        for _ in range(no_iters):
             model.zero_grad()
-            batch = X_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]
+            batch_idx = np.random.choice(len(X_train), batch_size, replace=False)
+            batch = X_train[batch_idx]
             if g_pool['gpu']:
                 target = torch.tensor(np.array([y for y in 
-                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]])).cuda()
+                            y_train[batch_idx]])).cuda()
             else:
                 target = torch.tensor(np.array([y for y in 
-                            y_train[batch_size * batch_idx:batch_size * (batch_idx + 1)]]))
+                            y_train[batch_idx]]))
                 
             if not len(target):
                 continue
@@ -174,6 +174,7 @@ def run_serial(kwargs):
     clustered_split = bool(int(model_conf['Preprocess']['ClusteredSplit']))
     
     epochs = int(model_conf['Training']['Epochs'])
+    no_iters = int(model_conf['Training']['NoIters'])
     
     emb_dim = int(model_conf['Params']['EmbDim'])
     hid_dim = int(model_conf['Params']['HidDim'])
@@ -251,7 +252,8 @@ def run_serial(kwargs):
                        logger,
                        from_checkpoint=from_checkpoint,
                        lr = lr,
-                       padding_size=padding_size)
+                       padding_size=padding_size,
+                       no_iters=no_iters)
     logger.debug("end training")
     
     # testing the result
