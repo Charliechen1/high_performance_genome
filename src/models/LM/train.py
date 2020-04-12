@@ -52,7 +52,7 @@ def train(X_train,
           batch_size, 
           logger, 
           from_checkpoint=None, 
-          check_every=1, 
+          check_every=100, 
           lr=1e-4,
           padding_size=3000,
           no_iters=1000):
@@ -185,6 +185,7 @@ def run_serial(kwargs):
     n_lstm = int(model_conf['Params']['NLSTM'])
     n_head = int(model_conf['Params']['NHeaders'])
     n_attn = bool(int(model_conf['Params']['NAttn']))
+    need_pos_enc = bool(int(model_conf['Params']['NeedPosEnc']))
     
     g_pool['gpu'] = gpu
     
@@ -227,7 +228,8 @@ def run_serial(kwargs):
                      tagset_size=len(g_pool['fams']),
                      n_lstm=n_lstm, 
                      n_head=n_head,
-                     n_attn=n_attn)
+                     n_attn=n_attn,
+                     need_pos_enc=need_pos_enc)
     
     # check device
     if gpu:

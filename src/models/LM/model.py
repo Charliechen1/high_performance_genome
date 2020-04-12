@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from Sublayer import MultiHeadAttention, PositionwiseFeedForward, EncoderLayer
+from Sublayer import MultiHeadAttention, PositionwiseFeedForward, EncoderLayer, PositionalEncoding
 
 class LSTMAttn(nn.Module):
 
@@ -17,15 +17,21 @@ class LSTMAttn(nn.Module):
                  n_lstm=3, 
                  n_head=12,
                  n_attn=2,
-                 dropout=0.1):
+                 dropout=0.1,
+                 need_pos_enc=True):
         super(LSTMAttn, self).__init__()
         self.hidden_dim = hidden_dim
         self.d_k = d_k
         self.n_head = n_head
         self.n_attn = n_attn
         self.n_lstm = n_lstm
+        self.need_pos_enc = need_pos_enc
         
         self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
+        
+        if need_pos_enc:
+            self.position_enc = PositionalEncoding(embedding_dim, n_position=seq_len)
+        
         if n_lstm:
             self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=n_lstm)
         else:
@@ -39,8 +45,6 @@ class LSTMAttn(nn.Module):
         else:
             self.hid2hid = nn.Linear(self.hidden_dim * 2, self.hidden_dim * 2)
         
-        #self.slf_attn = MultiHeadAttention(n_head, hidden_dim * 2, seq_len, d_k, d_v, dropout=dropout)
-        #self.pos_ffn = PositionwiseFeedForward(hidden_dim * 2, hidden_dim * 2, seq_len, dropout=dropout)
         self.slf_attn_encoder = EncoderLayer(n_head, self.hidden_dim, seq_len, d_k, d_v, dropout=dropout)
         
         self.hidden2tag = nn.Linear(self.hidden_dim * 2, tagset_size)
@@ -51,24 +55,25 @@ class LSTMAttn(nn.Module):
     
     def forward(self, X, slf_attn_mask=None):
         b_size, seq_len = X.size()
-        embeds = self.word_embeddings(X)
+        
+        #embedding + LSTM part
+        enc_output = self.word_embeddings(X)
+        if self.need_pos_enc:
+            enc_output = self.position_enc(enc_output)
+        enc_output = self.dropout(enc_output)
         if self.n_lstm:
             # here "if" is for flexibility of taking LSTM or not.
-            embeds, _ = self.lstm(embeds.view(b_size, seq_len, -1))
-        embeds = embeds.transpose(1, 2)
+            enc_output, _ = self.lstm(enc_output.view(b_size, seq_len, -1))
+        
+        enc_output = enc_output.transpose(1, 2)
         
         # take self-attention on the hidden states of the LSTM model
         # start attention layer
         
         ###### self attention version ######
         if self.n_attn:
-            attn_out = embeds
+            attn_out = enc_output
             for _ in range(self.n_attn):
-                """
-                enc_out, enc_slf_attn = self.slf_attn(
-                    attn_out, attn_out, attn_out, mask=slf_attn_mask)
-                attn_out = self.pos_ffn(enc_out)
-                """
                 attn_out, slf_attn_res = self.slf_attn_encoder(attn_out)
         ####################################
         else:
