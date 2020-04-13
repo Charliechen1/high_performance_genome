@@ -159,18 +159,19 @@ def train(X_train,
 def test(model, X_test, y_test, test_size=500, test_times=10, padding_size=3000):
     acc_list = []
     idx_list = np.random.choice(len(X_test) // test_size, test_times, replace=False)
-    for idx in idx_list:
-        text_idx = np.array(list(range(idx * test_size, (idx + 1) * test_size)))
-        X_test_fold = X_test[text_idx]
-        y_test_fold = y_test[text_idx]
-
-        X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
-                               for sentence in X_test_fold]
-        X_test_fold = torch.stack(X_test_fold)
-        score_pred = model(X_test_fold)
-        y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
-        acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
-        acc_list.append(acc_sgl)
+    with torch.no_grad():
+        for idx in idx_list:
+            text_idx = np.array(list(range(idx * test_size, (idx + 1) * test_size)))
+            X_test_fold = X_test[text_idx]
+            y_test_fold = y_test[text_idx]
+            X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
+                                   for sentence in X_test_fold]
+            X_test_fold = torch.stack(X_test_fold)
+            score_pred = model(X_test_fold)
+            y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
+            acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
+            acc_list.append(acc_sgl)
+        
     acc = np.mean(acc_list)
     return acc
 
@@ -266,7 +267,9 @@ def run_serial(kwargs):
                        from_checkpoint=from_checkpoint,
                        lr = lr,
                        padding_size=padding_size,
-                       no_iters=no_iters)
+                       no_iters=no_iters,
+                       no_train=no_train,
+                       no_valid=no_valid)
     logger.debug("end training")
     
     # testing the result
