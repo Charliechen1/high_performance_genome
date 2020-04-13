@@ -152,7 +152,7 @@ def train(X_train,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
-    }, f"model/model_LSTM.final_model")
+    }, f"model/cluster_xlstm_xposenc_expx.model")
     
     return loss_track
 
