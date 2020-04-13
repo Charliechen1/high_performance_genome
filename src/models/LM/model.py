@@ -78,18 +78,11 @@ class LSTMAttn(nn.Module):
         ####################################
         else:
             # default, take the last layer as output of LSTM
-            #attn_out = embeds[:, :, -1]
             attn_out = embeds.mean(2)
         # linear transformation and classification layer
-        #hidden_res = self.relu(self.hid2hid(attn_out))
         hidden_res = attn_out.mean(2)
         hidden_res = hidden_res.view(b_size, self.hidden_dim * 2)
         tag_space = self.hidden2tag(hidden_res)
         tag_scores = F.log_softmax(tag_space, dim=1)
         return tag_scores
-    
-class TapePretrained(nn.Module):
-    def __init__(self):
-        pass
-        
     
