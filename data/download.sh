@@ -40,7 +40,7 @@ for ((k=0; k<END; k++)) do
     fi
     wget https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/random_split/dev/data-$code-of-000$END
 done
-cd ..
+cd ../..
 
 rm -rf clustered_split
 mkdir clustered_split && cd clustered_split
@@ -84,3 +84,4 @@ for ((k=0; k<END; k++)) do
     fi
     wget https://storage.googleapis.com/brain-genomics-public/research/proteins/pfam/clustered_split/dev/data-$code-of-000$END
 done
+cd ../..

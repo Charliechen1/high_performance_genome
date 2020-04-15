@@ -24,7 +24,6 @@ def load_data(conf, logger, g_pool, clustered_split=False):
     """
     function to load data
     """
-    
     model_conf = configparser.ConfigParser()
     model_conf.read(conf['path']['model'])
     
@@ -59,17 +58,19 @@ def load_data(conf, logger, g_pool, clustered_split=False):
     g_pool['vocab'] = vocab
     fams = np.array(train["family_id"].value_counts().index)[::sample_every]
     g_pool['fams'] = fams
+    
     train_partition = train[train["family_id"].isin(fams)]
-    #max_len = int(model_conf['Preprocess']['MaxLen'])
     X_train_raw = train_partition['aligned_sequence'].values
     y_train_raw = train_partition['family_id'].values
+    
     test_partition = test[test["family_id"].isin(fams)]
     X_test_raw = test_partition['aligned_sequence'].values
     y_test_raw = test_partition['family_id'].values
+    
     dev_partition = dev[dev["family_id"].isin(fams)]
     X_dev_raw = dev_partition['aligned_sequence'].values
     y_dev_raw = dev_partition['family_id'].values
-    #X_train_raw, X_test_raw, y_train_raw, y_test_raw = train_test_split(X, y, test_size=test_size, random_state=45)
+    
     fam_vocab = {fam: idx for idx, fam in enumerate(fams)}
     g_pool['fam_vocab'] = fam_vocab
     
