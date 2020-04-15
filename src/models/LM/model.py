@@ -78,7 +78,7 @@ class LSTMAttn(nn.Module):
         ####################################
         else:
             # default, take the last layer as output of LSTM
-            attn_out = embeds.mean(2)
+            attn_out = enc_output
         # linear transformation and classification layer
         hidden_res = attn_out.mean(2)
         hidden_res = hidden_res.view(b_size, self.hidden_dim * 2)
