@@ -59,6 +59,7 @@ dependencies:
     - kiwisolver==1.2.0
     - matplotlib==3.2.1
     - networkx==2.4
+    - obonet==0.2.5
     - pandas==1.0.3
     - plyfile==0.7.2
     - pyparsing==2.4.7
@@ -76,4 +77,5 @@ dependencies:
     - torch-sparse==0.6.1
     - torch-spline-conv==1.2.0
     - urllib3==1.25.8
+prefix: /global/homes/n/nswenson/.conda/envs/hpg_gcn_env
 

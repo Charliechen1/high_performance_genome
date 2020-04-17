@@ -16,6 +16,7 @@ then
     echo "Environment already installed"
 else
     echo "Installing environment"
+    module load cuda/10.1.243
     conda env create -f $CONF
 fi
 

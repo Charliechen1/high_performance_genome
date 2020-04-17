@@ -5,4 +5,14 @@
 #SBATCH -c 80
 #SBATCH --gres=gpu:8
 
-srun -n 1 `run script`
+if [[ ! -d "log" ]]
+then
+    mkdir log
+fi
+
+if [[ ! -d "model" ]]
+then
+    mkdir model
+fi
+
+srun -n 1 nohup ~/.conda/envs/hpg_gcn_env/bin/python train.py
