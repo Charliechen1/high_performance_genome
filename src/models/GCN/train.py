@@ -15,9 +15,12 @@ import data
 import matplotlib.pyplot as plt
 from sklearn.metrics import auc
 
+# global device param
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 def split_data(data_dict, aa_vocab, go_type = 'mf'):
     
-    
+
     if go_type == 'mf':
         X = data_dict['X_mf'] 
         y = data_dict['y_mf']  
@@ -33,8 +36,8 @@ def split_data(data_dict, aa_vocab, go_type = 'mf'):
         y = data_dict['y_cc']  
         vocab = data_dict['cc_vocab']
         
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.125, random_state=41)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.125, random_state=41)
+    X_train_temp, X_test, y_train_temp, y_test = train_test_split(X, y, test_size=0.125, random_state=41)
+    X_train, X_val, y_train, y_val = train_test_split(X_train_temp, y_train_temp, test_size=0.125, random_state=41)
     dataset_train = []
     for data, raw_labels in zip(X_train, y_train):
         x = prepare_sequence(data[0], aa_vocab, 3000).float()
@@ -80,7 +83,7 @@ def prepare_sequence(seq, vocab, padding):
     return torch.tensor(idxs, dtype=torch.long)
 
 
-def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.00005, num_epoch = 10):
+def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.00005, num_epoch = 50):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
     criterion = torch.nn.BCELoss()
@@ -90,6 +93,7 @@ def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.00005, num
     for epoch in range(num_epoch):
         for iteration, data in enumerate(train_loader):
             optimizer.zero_grad()
+            data = data.to(device)
             out = model(data)
             loss = criterion(out, data.y.float().reshape(-1, target_dim))
             loss.backward()
@@ -108,7 +112,6 @@ def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.00005, num
 def evaluate(model, dataset_train, dataset_val, target_dim):
     
     model.eval()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     train_loader = DataLoader(dataset_train, batch_size=64)
     val_loader = DataLoader(dataset_val, batch_size = 64)
     with torch.no_grad():
@@ -135,8 +138,10 @@ def evaluate(model, dataset_train, dataset_val, target_dim):
                     pred = (logits > thresh).float()
                     label = data.y.float().reshape(-1, target_dim)
                     train_labels[idx] = label
-                train_precision += ((label * pred).sum()/label.sum()).item()
-                train_recall += ((label * pred).sum()/pred.sum()).item()
+                if label.sum().item() != 0:
+                    train_precision += ((label * pred).sum()/label.sum()).item()
+                if pred.sum().item() != 0:
+                    train_recall += ((label * pred).sum()/pred.sum()).item()
                 train_num_batches += 1
             #print('precision = ', train_precision/train_num_batches)
             #print('recall = ', train_recall/train_num_batches)
@@ -168,13 +173,7 @@ def evaluate(model, dataset_train, dataset_val, target_dim):
             val_precisions.append(val_precision/val_num_batches)
             val_recalls.append(val_recall/val_num_batches)
             
-    plt.plot(train_precisions, train_recalls)
-    plt.plot(val_precisions, val_recalls)
-    plt.title('Averaged Precision Recall for Molecular Function')
-    plt.legend([f'train auc = {round(auc(train_precisions, train_recalls), 3)}', f'val auc = {round(auc(val_precisions, val_recalls), 3)}'])
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.savefig('test.png')
+    return train_precisions, train_recalls, val_precisions, val_recalls
         
 def main():
     
@@ -189,7 +188,7 @@ def main():
     conf = configparser.ConfigParser()
     conf.read(config_path)
     
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    logger.debug(f'running on {device}')
     
     data_dir = conf['path']['gcn_data'] + '/data.pkl'
     if not os.path.exists(data_dir):
@@ -222,9 +221,27 @@ def main():
         
         model = GCN(target_dim, lm_embedding)
         
+    model.to(device)
+    
     train(logger, model, train_data, val_data, target_dim)
     
-    evaluate(model, train_data, val_data, target_dim)
+    train_precisions, train_recalls, val_precisions, val_recalls = evaluate(model, train_data, val_data, target_dim)
+    
+    plt.plot(train_precisions, train_recalls)
+    plt.plot(val_precisions, val_recalls)
+    plt.title('Averaged Precision Recall for Molecular Function')
+    plt.legend([f'train auc = {round(auc(train_precisions, train_recalls), 3)}', f'val auc = {round(auc(val_precisions, val_recalls), 3)}'])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.savefig('log/temp.png')
+    
+    if conf['path']['model'] is not None and conf['path']['model'] != '':
+        
+        torch.save(model, conf['path']['model'])
+        
+    else:
+        
+        torch.save(model, 'gcn.temp')
 
 if __name__ == '__main__':
     

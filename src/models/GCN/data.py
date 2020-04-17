@@ -190,7 +190,7 @@ def main():
     with open(data_dir + '/data.pkl', 'wb') as f:
         pickle.dump(data, f)
     
-    logger.debug(f'finished. data saved to {data_dir}/data.pkl')
+    logger.debug(f'finished data processing. data saved to {data_dir}/data.pkl')
     
 if __name__ == '__main__':
     
