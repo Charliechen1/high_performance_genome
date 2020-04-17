@@ -58,7 +58,9 @@ def train(X_train,
           no_iters=1000,
           fold_size=500,
           no_valid=10,
-          no_train=10):
+          no_train=10,
+          early_stop=0.05,
+          max_norm=5):
     """
     The training function
     """
@@ -98,9 +100,11 @@ def train(X_train,
         target_valid = torch.tensor(np.array(y_valid))
         
     idx = 0
+    stop_flag = False
     for epoch in range(curr_epoch, epochs):
         logger.info(f"epoch: {epoch}")
-        
+        if stop_flag:
+            break
         # saving checkpoints
         if epoch % check_every == 0 and epoch > 0:
             torch.save({
@@ -112,6 +116,8 @@ def train(X_train,
             
         # divide the training data into batchs, or the GPU memory cannot handle that
         for _ in range(no_iters):
+            if stop_flag:
+                break
             model.zero_grad()
             batch_idx = np.random.choice(len(X_train), batch_size, replace=False)
             batch = X_train[batch_idx]
@@ -131,6 +137,11 @@ def train(X_train,
 
             loss = loss_function(tag_scores, target)
             loss_track.append(loss)
+            loss.backward()
+            # gradient clipping
+            torch.nn.utils.clip_grad_norm(model.parameters(), max_norm, norm_type=2)
+            optimizer.step()
+            
             if idx % 100 == 0:
                 logger.info(f"iteration no: {idx}/{total_iters}")
                 
@@ -138,12 +149,22 @@ def train(X_train,
                 train_acc = test(model, X_train, y_train, test_size=fold_size, test_times=no_train, padding_size=padding_size)
                 valid_acc = test(model, X_valid, y_valid, test_size=fold_size, test_times=no_valid, padding_size=padding_size)
                 
+                # check norm
+                total_norm = 0.0
+                for p in model.parameters():
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+                total_norm = total_norm ** (1. / 2)
+                
                 logger.info(f"current loss: {loss}")
                 logger.info(f"current training acc: {train_acc:.2%}") 
                 logger.info(f"current validation acc: {valid_acc:.2%}") 
+                logger.info(f"current model total gradient norm: {total_norm}")   
                 
-            loss.backward()
-            optimizer.step()
+                if total_norm < early_stop and idx > 0.75 * epochs * no_iters:
+                    # stop when the gradient is small and done minimum iterations of training
+                    logger.info(f"early exit with total_norm: {total_norm}, which is under the threshold: {early_stop}")
+                    stop_flag = True
             idx += 1
             
     # save the model
@@ -192,6 +213,8 @@ def run_serial(kwargs):
     
     epochs = int(model_conf['Training']['Epochs'])
     no_iters = int(model_conf['Training']['NoIters'])
+    early_stop = float(model_conf['Training']['EarlyStop'])
+    max_norm = float(model_conf['Training']['MaxNorm'])
     
     emb_dim = int(model_conf['Params']['EmbDim'])
     hid_dim = int(model_conf['Params']['HidDim'])
@@ -269,7 +292,9 @@ def run_serial(kwargs):
                        padding_size=padding_size,
                        no_iters=no_iters,
                        no_train=no_train,
-                       no_valid=no_valid)
+                       no_valid=no_valid,
+                       early_stop=early_stop,
+                       max_norm=max_norm)
     logger.debug("end training")
     
     # testing the result
