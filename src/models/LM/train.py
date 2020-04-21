@@ -31,9 +31,12 @@ def parse_args(argv=None):
         argv = sys.argv[1:]
        
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--logger', type=parse_logger, default='', help='path to logger [stdout]')
-    parser.add_argument('-c', '--config', type=str, help='path of the configuration', default="../../../config/main.conf")
-    parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', help='which CUDA device to use')
+    parser.add_argument('-l', '--logger', type=parse_logger, default='', 
+                        help='path to logger [stdout]')
+    parser.add_argument('-c', '--config', type=str, help='path of the configuration', 
+                        default="../../../config/main.conf")
+    parser.add_argument('-C', '--cuda_index', type=parse_cuda_index, default='all', 
+                        help='which CUDA device to use')
     
     if len(argv) == 0:
         parser.print_help()
@@ -60,7 +63,8 @@ def train(X_train,
           no_valid=10,
           no_train=10,
           early_stop=0.05,
-          max_norm=5):
+          init_max_norm=5,
+          max_norm_decay=1):
     """
     The training function
     """
@@ -139,15 +143,24 @@ def train(X_train,
             loss_track.append(loss)
             loss.backward()
             # gradient clipping
-            torch.nn.utils.clip_grad_norm(model.parameters(), max_norm, norm_type=2)
+            # with a decay of the maximum of total norm bound.
+            if init_max_norm:
+                # when init_max_norm = 0, means we don't need to clip
+                remain_rate = float(total_iters - max_norm_decay * idx) / total_iters
+                decayed_max_norm = init_max_norm ** remain_rate
+                torch.nn.utils.clip_grad_norm(model.parameters(), decayed_max_norm, norm_type=2)
             optimizer.step()
             
             if idx % 100 == 0:
                 logger.info(f"iteration no: {idx}/{total_iters}")
                 
                 # look at the training accuracy of this batch
-                train_acc = test(model, X_train, y_train, test_size=fold_size, test_times=no_train, padding_size=padding_size)
-                valid_acc = test(model, X_valid, y_valid, test_size=fold_size, test_times=no_valid, padding_size=padding_size)
+                train_acc = test(model, X_train, y_train, test_size=fold_size, 
+                                 test_times=no_train, padding_size=padding_size,
+                                 random=True)
+                valid_acc = test(model, X_valid, y_valid, test_size=fold_size, 
+                                 test_times=no_valid, padding_size=padding_size,
+                                 random=True)
                 
                 # check norm
                 total_norm = 0.0
@@ -177,14 +190,20 @@ def train(X_train,
     
     return loss_track
 
-def test(model, X_test, y_test, test_size=500, test_times=10, padding_size=3000):
+def test(model, X_test, y_test, test_size=500, 
+         test_times=10, padding_size=3000, random=False):
     acc_list = []
     idx_list = np.random.choice(len(X_test) // test_size, test_times, replace=False)
+        
     with torch.no_grad():
         for idx in idx_list:
-            text_idx = np.array(list(range(idx * test_size, (idx + 1) * test_size)))
-            X_test_fold = X_test[text_idx]
-            y_test_fold = y_test[text_idx]
+            test_idx = []
+            if not random:
+                test_idx = np.array(list(range(idx * test_size, (idx + 1) * test_size)))
+            else:
+                test_idx = np.random.choice(len(X_test), test_size, replace=False)
+            X_test_fold = X_test[test_idx]
+            y_test_fold = y_test[test_idx]
             X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
                                    for sentence in X_test_fold]
             X_test_fold = torch.stack(X_test_fold)
@@ -192,8 +211,8 @@ def test(model, X_test, y_test, test_size=500, test_times=10, padding_size=3000)
             y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
             acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
             acc_list.append(acc_sgl)
-        
-    acc = np.mean(acc_list)
+            
+        acc = np.mean(acc_list)
     return acc
 
 def run_serial(kwargs):
@@ -214,7 +233,8 @@ def run_serial(kwargs):
     epochs = int(model_conf['Training']['Epochs'])
     no_iters = int(model_conf['Training']['NoIters'])
     early_stop = float(model_conf['Training']['EarlyStop'])
-    max_norm = float(model_conf['Training']['MaxNorm'])
+    init_max_norm = float(model_conf['Training']['InitMaxNorm'])
+    max_norm_decay = float(model_conf['Training']['MaxNormDecay'])
     
     emb_dim = int(model_conf['Params']['EmbDim'])
     hid_dim = int(model_conf['Params']['HidDim'])
@@ -251,7 +271,8 @@ def run_serial(kwargs):
     # as there are vocab and fams
     logger.debug("start loading data")
     
-    X_train, X_test, X_dev, y_train, y_test, y_dev = load_data(conf, logger, g_pool, clustered_split=clustered_split)
+    X_train, X_test, X_dev, y_train, y_test, y_dev = load_data(
+        conf, logger, g_pool, clustered_split=clustered_split)
     
     logger.debug("finish loading data")
     
@@ -290,17 +311,21 @@ def run_serial(kwargs):
                        from_checkpoint=from_checkpoint,
                        lr = lr,
                        padding_size=padding_size,
+                       fold_size=fold_size,
                        no_iters=no_iters,
                        no_train=no_train,
                        no_valid=no_valid,
                        early_stop=early_stop,
-                       max_norm=max_norm)
+                       init_max_norm=init_max_norm,
+                       max_norm_decay=max_norm_decay)
     logger.debug("end training")
     
     # testing the result
     # because of the limitation of the GPU memory
     # have to test the result for multiple times
-    acc = test(model, X_test, y_test, test_size=fold_size, test_times=no_test, padding_size=padding_size)
+    acc = test(model, X_test, y_test, test_size=fold_size, 
+               test_times=no_test, padding_size=padding_size,
+               random=False)
     logger.info(f"The final accuracy is {acc:.2%}")
     return
 
