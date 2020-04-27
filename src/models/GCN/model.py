@@ -36,7 +36,8 @@ class GCN(torch.nn.Module):
         
         return x
     
-class Toy(torch.nn.Module):
+# class Toy(torch.nn.Module):
+class LinearClassifier(torch.nn.Module):
     
     def __init__(self, target_dim, lm_embedding):
         

@@ -62,23 +62,53 @@ def main():
         sequence_dict = json.load(f)
     
     # find all GO terms per PDB ID
+    """
     X_mf_data = []
     y_mf_data = []
     X_bp_data = []
     y_bp_data = []
     X_cc_data = []
     y_cc_data = []
+    """
+    X_data = {
+        'molecular_function': [],
+        'biological_process': [],
+        'cellular_component': []
+    }
+    y_data = {
+        'molecular_function': [],
+        'biological_process': [],
+        'cellular_component': []
+    }
+    abbr_map = {
+        'molecular_function': 'mf',
+        'biological_process': 'bp',
+        'cellular_component': 'cc'
+    }
     for key, value in contact_maps.items():
+        """
         mf_go_list = []
         bp_go_list = []
         cc_go_list = []
+        """
+        go_list_map = {
+            'molecular_function': [],
+            'biological_process': [],
+            'cellular_component': []
+        }
         for go_term in pdb_to_go.get(key, []):
+            """
             if goid_to_category.get(go_term, '') == 'molecular_function':
                 mf_go_list.append(go_term)
             if goid_to_category.get(go_term, '') == 'biological_process':
                 bp_go_list.append(go_term)
             if goid_to_category.get(go_term, '') == 'cellular_component':
                 cc_go_list.append(go_term)
+            """
+            typ = goid_to_category.get(go_term, '')
+            go_list_map[typ].append(go_term)
+        
+        """
         if len(mf_go_list) > 0:
             X_mf_data.append((sequence_dict[key], value))
             y_mf_data.append(mf_go_list)
@@ -87,8 +117,16 @@ def main():
             y_bp_data.append(bp_go_list)
         if len(cc_go_list) > 0:
             X_cc_data.append((sequence_dict[key], value))
-            y_cc_data.append(cc_go_list)
+            y_cc_data.append(cc_go_list)    
+        """
+        for typ, go_list in go_list_map.items():
+            X_data[typ].append((sequence_dict[key], value))
+            y_data[typ].append(go_list_map)
             
+    for typ, abbr in abbr_map.items():
+        # set these variables
+        locals()[f'X_{abbr}_data'] = X_data[typ]
+        locals()[f'y_{abbr}_data'] = y_data[typ]
     
     # remove GO terms with less than 25 representatives     
     mf_counts = {}
@@ -174,6 +212,7 @@ def main():
     
     # save data
     data = {}
+    """
     data['X_mf'] = X_mf_data
     data['y_mf'] = y_mf_data
     data['mf_vocab'] = mf_vocab
@@ -183,6 +222,11 @@ def main():
     data['X_bp'] = X_mf_data
     data['y_bp'] = y_mf_data
     data['bp_vocab'] = mf_vocab
+    """
+    for abbr in abbr_map.values():
+        data[f'X_{abbr}'] = locals()[f'X_{abbr}_data']
+        data[f'y_{abbr}'] = locals()[f'y_{abbr}_data']
+        data[f'{abbr}_vocab'] = locals()[f'{abbr}_vocab']
     
     data_dir = conf['path']['gcn_data']
     if not os.path.exists(data_dir):

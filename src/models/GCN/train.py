@@ -27,7 +27,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def split_data(data_dict, aa_vocab, go_type = 'mf'):
     
-
+    """
     if go_type == 'mf':
         X = data_dict['X_mf'] 
         y = data_dict['y_mf']  
@@ -42,6 +42,11 @@ def split_data(data_dict, aa_vocab, go_type = 'mf'):
         X = data_dict['X_cc'] 
         y = data_dict['y_cc']  
         go_vocab = data_dict['cc_vocab']
+    """
+    for fam_type in ['mf', 'bp', 'cc']:
+        X = data_dict[f'X_{fam_type}'] 
+        y = data_dict[f'y_{fam_type}']  
+        go_vocab = data_dict[f'{fam_type}_vocab']
         
     X_train_temp, X_test, y_train_temp, y_test = train_test_split(X, y, test_size=0.125, random_state=41)
     X_train, X_val, y_train, y_val = train_test_split(X_train_temp, y_train_temp, test_size=0.125, random_state=41)
