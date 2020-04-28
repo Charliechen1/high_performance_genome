@@ -53,9 +53,13 @@ class LSTMAttn(nn.Module):
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU(inplace=True)
     
-    def forward(self, X, slf_attn_mask=None):
+    def forward(self, X, batch_padding_size=None, slf_attn_mask=None, is_gpu=True):
         b_size, seq_len = X.size()
         
+        # implemented batch padding
+        if not batch_padding_size:
+            batch_padding_size = seq_len
+            
         #embedding + LSTM part
         enc_output = self.word_embeddings(X)
         if self.need_pos_enc:
@@ -63,8 +67,16 @@ class LSTMAttn(nn.Module):
         enc_output = self.dropout(enc_output)
         if self.n_lstm:
             # here "if" is for flexibility of taking LSTM or not.
-            enc_output, _ = self.lstm(enc_output.view(b_size, seq_len, -1))
-        
+            # enc_output, _ = self.lstm(enc_output.view(b_size, seq_len, -1))
+            # u will want to pad only to the max size of current batch
+            enc_output, _ = self.lstm(enc_output[:, :batch_padding_size, :].view(b_size, batch_padding_size, -1))
+            if is_gpu:
+                remaining = torch.zeros(b_size, seq_len - batch_padding_size, enc_output.shape[2]).cuda()
+            else:
+                remaining = torch.zeros(b_size, seq_len - batch_padding_size, enc_output.shape[2])
+            
+            enc_output = torch.cat([enc_output, remaining], dim=1)
+            
         enc_output = enc_output.transpose(1, 2)
         
         # take self-attention on the hidden states of the LSTM model

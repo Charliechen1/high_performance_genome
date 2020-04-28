@@ -77,4 +77,25 @@ def load_data(conf, logger, g_pool, clustered_split=False):
     y_train = np.array([fam_vocab[y] for y in y_train_raw])
     y_test = np.array([fam_vocab[y] for y in y_test_raw])
     y_dev = np.array([fam_vocab[y] for y in y_dev_raw])
+    
+    X_train_len = [len(seq) for seq in X_train_raw]
+    X_test_len = [len(seq) for seq in X_test_raw]
+    X_dev_len = [len(seq) for seq in X_dev_raw]
+    
+    logger.info(f'X train len: avg: {sum(X_train_len)/len(X_train_len)}, max: {max(X_train_len)}, min: {min(X_train_len)}')
+    logger.info(f'X test len: avg: {sum(X_test_len)/len(X_test_len)}, max: {max(X_test_len)}, min: {min(X_test_len)}')
+    logger.info(f'X dev len: avg: {sum(X_dev_len)/len(X_dev_len)}, max: {max(X_dev_len)}, min: {min(X_dev_len)}')
+    
     return X_train_raw, X_test_raw, X_dev_raw, y_train, y_test, y_dev
+
+if __name__ == '__main__':
+    # testing code
+    X_train_raw, X_test_raw, X_dev_raw, y_train, y_test, y_dev = load_data(conf, logger, g_pool, clustered_split=False)
+    
+    X_train_len = [len(seq) for seq in X_train_raw]
+    X_test_len = [len(seq) for seq in X_test_raw]
+    X_dev_len = [len(seq) for seq in X_dev_raw]
+    
+    plt.plot(X_train_len)
+    plt.plot(X_test_len)
+    plt.plot(X_dev_len)

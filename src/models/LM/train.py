@@ -136,8 +136,9 @@ def train(X_train,
                 continue
             sentence_batch = [prepare_sequence(sentence, g_pool['vocab'], padding_size)
                                for sentence in batch]
+            batch_padding_size = max([len(seq) for seq in batch])
             sentence_in = torch.stack(sentence_batch)
-            tag_scores = model(sentence_in)
+            tag_scores = model(sentence_in, batch_padding_size)
 
             loss = loss_function(tag_scores, target)
             loss_track.append(loss)
@@ -153,6 +154,7 @@ def train(X_train,
             
             if idx % 100 == 0:
                 logger.info(f"iteration no: {idx}/{total_iters}")
+                logger.debug(f'batch_padding_size: {batch_padding_size}')
                 
                 # look at the training accuracy of this batch
                 train_acc = test(model, X_train, y_train, test_size=fold_size, 
@@ -204,10 +206,11 @@ def test(model, X_test, y_test, test_size=500,
                 test_idx = np.random.choice(len(X_test), test_size, replace=False)
             X_test_fold = X_test[test_idx]
             y_test_fold = y_test[test_idx]
+            batch_padding_size = max([len(seq) for seq in X_test_fold])
             X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
                                    for sentence in X_test_fold]
             X_test_fold = torch.stack(X_test_fold)
-            score_pred = model(X_test_fold)
+            score_pred = model(X_test_fold, batch_padding_size)
             y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
             acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
             acc_list.append(acc_sgl)
