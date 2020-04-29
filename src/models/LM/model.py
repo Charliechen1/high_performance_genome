@@ -2,14 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from Sublayer import MultiHeadAttention, PositionwiseFeedForward, EncoderLayer, PositionalEncoding
+from Sublayer import EncoderLayer, PositionalEncoding
+from DownStream import LinearClassifier, MaskedLanguageModel
 
 class LSTMAttn(nn.Module):
 
     def __init__(self, embedding_dim, 
                  hidden_dim, 
                  seq_len, 
-                 vocab_size, 
+                 vocab, 
                  tagset_size, 
                  padding_idx=0, 
                  d_k=64, 
@@ -18,7 +19,10 @@ class LSTMAttn(nn.Module):
                  n_head=12,
                  n_attn=2,
                  dropout=0.1,
-                 need_pos_enc=True):
+                 need_pos_enc=True,
+                 mlm_flag=False, 
+                 is_gpu=True,
+                 mask_ratio=0.1):
         super(LSTMAttn, self).__init__()
         self.hidden_dim = hidden_dim
         self.d_k = d_k
@@ -26,8 +30,13 @@ class LSTMAttn(nn.Module):
         self.n_attn = n_attn
         self.n_lstm = n_lstm
         self.need_pos_enc = need_pos_enc
+        self.mlm_flag = mlm_flag
+        self.is_gpu = is_gpu
+        self.mask_ratio = mask_ratio
+        self.vocab = vocab
+        self.vocab_size = len(vocab)
         
-        self.word_embeddings = nn.Embedding(vocab_size, embedding_dim, padding_idx=padding_idx)
+        self.word_embeddings = nn.Embedding(self.vocab_size, embedding_dim, padding_idx=padding_idx)
         
         if need_pos_enc:
             self.position_enc = PositionalEncoding(embedding_dim, n_position=seq_len)
@@ -45,32 +54,47 @@ class LSTMAttn(nn.Module):
         else:
             self.hid2hid = nn.Linear(self.hidden_dim * 2, self.hidden_dim * 2)
         
-        self.slf_attn_encoder = EncoderLayer(n_head, self.hidden_dim, seq_len, d_k, d_v, dropout=dropout)
+        # self.slf_attn_encoder = EncoderLayer(n_head, self.hidden_dim, seq_len, d_k, d_v, dropout=dropout)
+        self.slf_attn_encoder_blocks = nn.ModuleList([
+            EncoderLayer(n_head, self.hidden_dim, seq_len, d_k, d_v, dropout=dropout)
+            for _ in range(n_attn)])
+        self.linear_classifier = LinearClassifier(self.hidden_dim, tagset_size)
         
-        self.hidden2tag = nn.Linear(self.hidden_dim * 2, tagset_size)
+        # because of the bi-LSTM the total hidden_dim should be *2 
+        # if not using bi-LSTM, the hidden_dim is first devided by 2
+        self.masked_language_model = MaskedLanguageModel(
+            self.hidden_dim * 2, self.vocab_size)
         self.dropout = nn.Dropout(p=dropout)
         self.padding_idx = padding_idx
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU(inplace=True)
     
-    def forward(self, X, batch_padding_size=None, slf_attn_mask=None, is_gpu=True):
+    def forward(self, X, batch_padding_size=None, token_mask=None):
         b_size, seq_len = X.size()
+        
+        # creating mask and map the mask to the input
+        if token_mask is not None:
+            mask_label = self.vocab["<MASK>"]
+            X_input = X.masked_fill(token_mask == 0, mask_label)
+        else:
+            X_input = X
         
         # implemented batch padding
         if not batch_padding_size:
             batch_padding_size = seq_len
             
         #embedding + LSTM part
-        enc_output = self.word_embeddings(X)
+        enc_output = self.word_embeddings(X_input)
         if self.need_pos_enc:
             enc_output = self.position_enc(enc_output)
-        enc_output = self.dropout(enc_output)
+        #enc_output = self.dropout(enc_output)
         if self.n_lstm:
             # here "if" is for flexibility of taking LSTM or not.
             # enc_output, _ = self.lstm(enc_output.view(b_size, seq_len, -1))
-            # u will want to pad only to the max size of current batch
+            # u will want to send length only to the max size of current batch
+            # to the LSTM model
             enc_output, _ = self.lstm(enc_output[:, :batch_padding_size, :].view(b_size, batch_padding_size, -1))
-            if is_gpu:
+            if self.is_gpu:
                 remaining = torch.zeros(b_size, seq_len - batch_padding_size, enc_output.shape[2]).cuda()
             else:
                 remaining = torch.zeros(b_size, seq_len - batch_padding_size, enc_output.shape[2])
@@ -85,16 +109,20 @@ class LSTMAttn(nn.Module):
         ###### self attention version ######
         if self.n_attn:
             attn_out = enc_output
-            for _ in range(self.n_attn):
-                attn_out, slf_attn_res = self.slf_attn_encoder(attn_out)
+            for slf_attn_encoder in self.slf_attn_encoder_blocks:
+                attn_out, slf_attn_res = slf_attn_encoder(attn_out)
         ####################################
         else:
             # default, take the last layer as output of LSTM
             attn_out = enc_output
         # linear transformation and classification layer
-        hidden_res = attn_out.mean(2)
-        hidden_res = hidden_res.view(b_size, self.hidden_dim * 2)
-        tag_space = self.hidden2tag(hidden_res)
-        tag_scores = F.log_softmax(tag_space, dim=1)
-        return tag_scores
+        tag_scores = self.linear_classifier(attn_out)
+        
+        # masked language model part
+        if self.mlm_flag:
+            mlm_scores = self.masked_language_model(attn_out)
+        else:
+            mlm_scores = None
+        
+        return tag_scores, mlm_scores
     

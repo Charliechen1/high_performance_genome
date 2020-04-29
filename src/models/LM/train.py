@@ -55,7 +55,7 @@ def train(X_train,
           batch_size,
           logger,
           from_checkpoint=None, 
-          check_every=100, 
+          check_every=10, 
           lr=1e-4,
           padding_size=3000,
           no_iters=1000,
@@ -64,13 +64,17 @@ def train(X_train,
           no_train=10,
           early_stop=0.05,
           init_max_norm=5,
-          max_norm_decay=1):
+          max_norm_decay=1,
+          mlm_flag=False,
+          mask_ratio=0.1):
     """
     The training function
     """
     torch.manual_seed(1)
-
-    loss_function = nn.CrossEntropyLoss()
+    
+    #loss_function = nn.NLLLoss(ignore_index=0)
+    class_loss_function = nn.NLLLoss()
+    lm_loss_function = nn.NLLLoss(ignore_index=0)
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     loss_track = []
@@ -86,7 +90,7 @@ def train(X_train,
             curr_epoch = checkpoint['epoch']
             loss = checkpoint['loss']
 
-            model.eval()
+            model.train()
         except:
             logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
         
@@ -116,13 +120,17 @@ def train(X_train,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': loss,
-            }, f"model/model_LSTM.checkpoint_{epoch}")
+            }, f"checkpoints/model.checkpoint_{epoch}")
             
         # divide the training data into batchs, or the GPU memory cannot handle that
         for _ in range(no_iters):
             if stop_flag:
                 break
             model.zero_grad()
+            
+            ############################
+            # preparing input data
+            ############################
             batch_idx = np.random.choice(len(X_train), batch_size, replace=False)
             batch = X_train[batch_idx]
             if g_pool['gpu']:
@@ -134,13 +142,35 @@ def train(X_train,
                 
             if not len(target):
                 continue
+            
+            batch_padding_size = max([len(seq) for seq in batch])
             sentence_batch = [prepare_sequence(sentence, g_pool['vocab'], padding_size)
                                for sentence in batch]
-            batch_padding_size = max([len(seq) for seq in batch])
+            
+            # create mask
+            token_mask = None
+            if mlm_flag and mask_ratio > 0:
+                token_mask = mask_generator(batch, mask_ratio, padding_size)
+            
             sentence_in = torch.stack(sentence_batch)
-            tag_scores = model(sentence_in, batch_padding_size)
-
-            loss = loss_function(tag_scores, target)
+            if g_pool['gpu']:
+                sentence_in = sentence_in.cuda()
+            tag_scores, mlm_scores = model(sentence_in, batch_padding_size, token_mask)
+            class_loss = class_loss_function(tag_scores, target)
+            
+            # analyze the loss
+            
+            mlm_loss = None
+            if mlm_flag and mask_ratio > 0:
+                # we only compute cross entropy for the masked: mask==1 part
+                # we mask all the other tokens to be 0 and since the loss function 
+                # will ignore all the place of 0, it's actually only considering
+                # the content within the mask
+                sentence_in_mask = sentence_in.masked_fill(token_mask == 1, 0)
+                mlm_loss = lm_loss_function(mlm_scores, sentence_in_mask)
+                loss = mlm_loss + class_loss
+            else:
+                loss = class_loss
             loss_track.append(loss)
             loss.backward()
             # gradient clipping
@@ -171,15 +201,16 @@ def train(X_train,
                     total_norm += param_norm.item() ** 2
                 total_norm = total_norm ** (1. / 2)
                 
-                logger.info(f"current loss: {loss}")
-                logger.info(f"current training acc: {train_acc:.2%}") 
-                logger.info(f"current validation acc: {valid_acc:.2%}") 
+                logger.info(f"current loss: {loss}, classifier loss: {class_loss}, masked language model loss: {mlm_loss}")
+                logger.info(f"current classification training acc: {train_acc:.2%}") 
+                logger.info(f"current validation training acc: {valid_acc:.2%}") 
                 logger.info(f"current model total gradient norm: {total_norm}")   
                 
                 if total_norm < early_stop and idx > 0.75 * epochs * no_iters:
                     # stop when the gradient is small and done minimum iterations of training
                     logger.info(f"early exit with total_norm: {total_norm}, which is under the threshold: {early_stop}")
                     stop_flag = True
+           
             idx += 1
             
     # save the model
@@ -191,7 +222,7 @@ def train(X_train,
     }, f"model/cluster_xlstm_xposenc_expx.model")
     
     return loss_track
-
+    
 def test(model, X_test, y_test, test_size=500, 
          test_times=10, padding_size=3000, random=False):
     acc_list = []
@@ -210,7 +241,7 @@ def test(model, X_test, y_test, test_size=500,
             X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
                                    for sentence in X_test_fold]
             X_test_fold = torch.stack(X_test_fold)
-            score_pred = model(X_test_fold, batch_padding_size)
+            score_pred, mlm_pred = model(X_test_fold, batch_padding_size)
             y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
             acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
             acc_list.append(acc_sgl)
@@ -249,6 +280,8 @@ def run_serial(kwargs):
     n_head = int(model_conf['Params']['NHeaders'])
     n_attn = bool(int(model_conf['Params']['NAttn']))
     need_pos_enc = bool(int(model_conf['Params']['NeedPosEnc']))
+    mlm_flag = bool(int(model_conf['Params']['MlmFlag']))
+    mask_ratio = float(model_conf['Params']['MaskRatio'])
     
     # testing parameters
     fold_size = int(model_conf['Test']['FoldSize'])
@@ -283,12 +316,15 @@ def run_serial(kwargs):
     model = LSTMAttn(embedding_dim=emb_dim, 
                      hidden_dim=hid_dim, 
                      seq_len=padding_size, 
-                     vocab_size=len(g_pool['vocab']),
+                     vocab=g_pool['vocab'],
                      tagset_size=len(g_pool['fams']),
                      n_lstm=n_lstm, 
                      n_head=n_head,
                      n_attn=n_attn,
-                     need_pos_enc=need_pos_enc)
+                     need_pos_enc=need_pos_enc,
+                     mlm_flag=mlm_flag,
+                     is_gpu=gpu,
+                     mask_ratio=mask_ratio)
     
     # check device
     if gpu:
@@ -320,7 +356,9 @@ def run_serial(kwargs):
                        no_valid=no_valid,
                        early_stop=early_stop,
                        init_max_norm=init_max_norm,
-                       max_norm_decay=max_norm_decay)
+                       max_norm_decay=max_norm_decay,
+                       mlm_flag=mlm_flag,
+                       mask_ratio=mask_ratio)
     logger.debug("end training")
     
     # testing the result

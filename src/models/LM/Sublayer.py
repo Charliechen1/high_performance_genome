@@ -79,9 +79,6 @@ class MultiHeadAttention(nn.Module):
         v = self.w_vs(v).view(sz_b, len_v, n_head, d_v)
 
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        
-        if mask is not None:
-            mask = mask.unsqueeze(1)   
 
         q, attn = self.attention(q, k, v, mask=mask)
 
@@ -126,10 +123,6 @@ class ScaledDotProductAttention(nn.Module):
     def forward(self, q, k, v, mask=None):
         k_norm = F.normalize(k, p=2, dim=1)
         attn = torch.matmul(q, k_norm.transpose(2, 3))
-
-        if mask is not None:
-            attn = attn.masked_fill(mask == 0, -1e9)
-
         attn = self.dropout(F.softmax(attn, dim=-1))
         output = torch.matmul(attn, v)
 

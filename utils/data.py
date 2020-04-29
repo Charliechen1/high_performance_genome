@@ -20,6 +20,26 @@ def prepare_sequence(seq, vocab, padding):
     idxs = [vocab[w] for w in res]
     return torch.tensor(idxs, dtype=torch.long)
 
+def mask_generator(batch_X, mask_ratio, 
+                   padding_size, is_gpu=True, mask_mod=0):
+    """
+    function to provide mask for a batch of data
+    mask_mod = 0 means masking at the end
+    """
+    true_len_list = [len(sentence) for sentence in batch_X]
+    mask = np.ones((len(batch_X), padding_size))
+    
+    for row, true_len in enumerate(true_len_list):
+        start, end = int(true_len * (1 - mask_ratio)), true_len
+        mask[row, start:end] = 0
+    
+    if is_gpu:
+        mask = torch.tensor(mask).cuda()
+    else:
+        mask = torch.tensor(mask)
+    
+    return mask
+
 def load_data(conf, logger, g_pool, clustered_split=False):
     """
     function to load data
