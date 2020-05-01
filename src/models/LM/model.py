@@ -21,7 +21,9 @@ class LSTMAttn(nn.Module):
                  dropout=0.1,
                  need_pos_enc=True,
                  is_gpu=True,
-                 mask_ratio=0.1):
+                 mask_ratio=0.1,
+                 cls_weight=0.5,
+                 mlm_weight=0.5):
         super(LSTMAttn, self).__init__()
         self.hidden_dim = hidden_dim
         self.d_k = d_k
@@ -33,6 +35,8 @@ class LSTMAttn(nn.Module):
         self.mask_ratio = mask_ratio
         self.vocab = vocab
         self.vocab_size = len(vocab)
+        self.cls_weight = cls_weight
+        self.mlm_weight = mlm_weight
         
         self.word_embeddings = nn.Embedding(self.vocab_size, embedding_dim, padding_idx=padding_idx)
         
@@ -114,10 +118,14 @@ class LSTMAttn(nn.Module):
             # default, take the last layer as output of LSTM
             attn_out = enc_output
         # linear transformation and classification layer
-        tag_scores = self.linear_classifier(attn_out)
+        
+        tag_scores, mlm_scores = None, None
+        if self.cls_weight:
+            tag_scores = self.linear_classifier(attn_out)
         
         # masked language model part
-        mlm_scores = self.masked_language_model(attn_out)
+        if self.mlm_weight:
+            mlm_scores = self.masked_language_model(attn_out)
         
         
         return tag_scores, mlm_scores

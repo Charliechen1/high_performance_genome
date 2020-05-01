@@ -121,7 +121,7 @@ def train(X_train,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': loss,
-            }, f"checkpoints/0_2_cls_0_8_mlm_model.checkpoint_{epoch}")
+            }, f"checkpoints/mlm_model.checkpoint_{epoch}")
             #torch.save(model, f"checkpoints/model.checkpoint_{epoch}")
             
         # divide the training data into batchs, or the GPU memory cannot handle that
@@ -158,14 +158,20 @@ def train(X_train,
             tag_scores, mlm_scores = model(sentence_in, batch_padding_size, token_mask)
             
             # analyze the loss
-            cls_loss = class_loss_function(tag_scores, target)
+            if cls_weight:
+                cls_loss = class_loss_function(tag_scores, target)
+            else:
+                cls_loss = 0.0
             
             # we only compute cross entropy for the masked: mask==1 part
             # we mask all the other tokens to be 0 and since the loss function 
             # will ignore all the place of 0, it's actually only considering
             # the content within the mask
-            sentence_in_mask = sentence_in.masked_fill(token_mask == 1, 0)
-            mlm_loss = lm_loss_function(mlm_scores, sentence_in_mask)
+            if mlm_weight:
+                sentence_in_mask = sentence_in.masked_fill(token_mask == 1, 0)
+                mlm_loss = lm_loss_function(mlm_scores, sentence_in_mask)
+            else:
+                mlm_loss = 0.0
             
             loss = (cls_weight * cls_loss + mlm_weight * mlm_loss) / (cls_weight + mlm_weight)
             
@@ -338,7 +344,9 @@ def run_serial(kwargs):
                      n_attn=n_attn,
                      need_pos_enc=need_pos_enc,
                      is_gpu=gpu,
-                     mask_ratio=mask_ratio)
+                     mask_ratio=mask_ratio,
+                     cls_weight=cls_weight,
+                     mlm_weight=mlm_weight)
     
     # check device
     if gpu:
