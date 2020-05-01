@@ -20,7 +20,6 @@ class LSTMAttn(nn.Module):
                  n_attn=2,
                  dropout=0.1,
                  need_pos_enc=True,
-                 mlm_flag=False, 
                  is_gpu=True,
                  mask_ratio=0.1):
         super(LSTMAttn, self).__init__()
@@ -30,7 +29,6 @@ class LSTMAttn(nn.Module):
         self.n_attn = n_attn
         self.n_lstm = n_lstm
         self.need_pos_enc = need_pos_enc
-        self.mlm_flag = mlm_flag
         self.is_gpu = is_gpu
         self.mask_ratio = mask_ratio
         self.vocab = vocab
@@ -119,10 +117,8 @@ class LSTMAttn(nn.Module):
         tag_scores = self.linear_classifier(attn_out)
         
         # masked language model part
-        if self.mlm_flag:
-            mlm_scores = self.masked_language_model(attn_out)
-        else:
-            mlm_scores = None
+        mlm_scores = self.masked_language_model(attn_out)
+        
         
         return tag_scores, mlm_scores
     

@@ -65,14 +65,15 @@ def train(X_train,
           early_stop=0.05,
           init_max_norm=5,
           max_norm_decay=1,
-          mlm_flag=False,
+          mlm_weight=0.5,
+          cls_weight=0.5,
           mask_ratio=0.1):
     """
     The training function
     """
-    torch.manual_seed(1)
+    # torch.manual_seed(1)
     
-    #loss_function = nn.NLLLoss(ignore_index=0)
+    # loss_function = nn.NLLLoss(ignore_index=0)
     class_loss_function = nn.NLLLoss()
     lm_loss_function = nn.NLLLoss(ignore_index=0)
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -89,13 +90,13 @@ def train(X_train,
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             curr_epoch = checkpoint['epoch']
             loss = checkpoint['loss']
-
+            #model = torch.load(from_checkpoint)
             model.train()
         except:
             logger.error(f"the checkpoint file may not be correct: {from_checkpoint}")
         
     # record the total number of iterations
-    total_iters = no_iters * epochs
+    total_iters = no_iters * (epochs - curr_epoch)
     
     # process validation set
     sentence_valid = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
@@ -116,11 +117,12 @@ def train(X_train,
         # saving checkpoints
         if epoch % check_every == 0 and epoch > 0:
             torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss,
-            }, f"checkpoints/model.checkpoint_{epoch}")
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss,
+            }, f"checkpoints/0_2_cls_0_8_mlm_model.checkpoint_{epoch}")
+            #torch.save(model, f"checkpoints/model.checkpoint_{epoch}")
             
         # divide the training data into batchs, or the GPU memory cannot handle that
         for _ in range(no_iters):
@@ -148,29 +150,25 @@ def train(X_train,
                                for sentence in batch]
             
             # create mask
-            token_mask = None
-            if mlm_flag and mask_ratio > 0:
-                token_mask = mask_generator(batch, mask_ratio, padding_size)
+            token_mask = mask_generator(batch, mask_ratio, padding_size)
             
             sentence_in = torch.stack(sentence_batch)
             if g_pool['gpu']:
                 sentence_in = sentence_in.cuda()
             tag_scores, mlm_scores = model(sentence_in, batch_padding_size, token_mask)
-            class_loss = class_loss_function(tag_scores, target)
             
             # analyze the loss
+            cls_loss = class_loss_function(tag_scores, target)
             
-            mlm_loss = None
-            if mlm_flag and mask_ratio > 0:
-                # we only compute cross entropy for the masked: mask==1 part
-                # we mask all the other tokens to be 0 and since the loss function 
-                # will ignore all the place of 0, it's actually only considering
-                # the content within the mask
-                sentence_in_mask = sentence_in.masked_fill(token_mask == 1, 0)
-                mlm_loss = lm_loss_function(mlm_scores, sentence_in_mask)
-                loss = mlm_loss + class_loss
-            else:
-                loss = class_loss
+            # we only compute cross entropy for the masked: mask==1 part
+            # we mask all the other tokens to be 0 and since the loss function 
+            # will ignore all the place of 0, it's actually only considering
+            # the content within the mask
+            sentence_in_mask = sentence_in.masked_fill(token_mask == 1, 0)
+            mlm_loss = lm_loss_function(mlm_scores, sentence_in_mask)
+            
+            loss = (cls_weight * cls_loss + mlm_weight * mlm_loss) / (cls_weight + mlm_weight)
+            
             loss_track.append(loss)
             loss.backward()
             # gradient clipping
@@ -187,12 +185,12 @@ def train(X_train,
                 logger.debug(f'batch_padding_size: {batch_padding_size}')
                 
                 # look at the training accuracy of this batch
-                train_acc = test(model, X_train, y_train, test_size=fold_size, 
+                train_cls_acc, train_mlm_acc = test(model, X_train, y_train, test_size=fold_size, 
                                  test_times=no_train, padding_size=padding_size,
-                                 random=True)
-                valid_acc = test(model, X_valid, y_valid, test_size=fold_size, 
+                                 random=True, mask_ratio=mask_ratio)
+                valid_cls_acc, valid_mlm_acc = test(model, X_valid, y_valid, test_size=fold_size, 
                                  test_times=no_valid, padding_size=padding_size,
-                                 random=True)
+                                 random=True, mask_ratio=mask_ratio)
                 
                 # check norm
                 total_norm = 0.0
@@ -201,9 +199,9 @@ def train(X_train,
                     total_norm += param_norm.item() ** 2
                 total_norm = total_norm ** (1. / 2)
                 
-                logger.info(f"current loss: {loss}, classifier loss: {class_loss}, masked language model loss: {mlm_loss}")
-                logger.info(f"current classification training acc: {train_acc:.2%}") 
-                logger.info(f"current validation training acc: {valid_acc:.2%}") 
+                logger.info(f"current weighted total loss: {loss}, classifier loss: {cls_loss}, masked language model loss: {mlm_loss}")
+                logger.info(f"current training acc: cls: {train_cls_acc:.2%}, mlm: {train_mlm_acc:.2%}") 
+                logger.info(f"current validation acc: cls: {valid_cls_acc:.2%}, mlm: {valid_mlm_acc:.2%}") 
                 logger.info(f"current model total gradient norm: {total_norm}")   
                 
                 if total_norm < early_stop and idx > 0.75 * epochs * no_iters:
@@ -215,17 +213,18 @@ def train(X_train,
             
     # save the model
     torch.save({
-        'epoch': epoch,
+        'epoch': epoch + 1,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
     }, f"model/cluster_xlstm_xposenc_expx.model")
     
+    
     return loss_track
     
 def test(model, X_test, y_test, test_size=500, 
-         test_times=10, padding_size=3000, random=False):
-    acc_list = []
+         test_times=10, padding_size=3000, random=False, mask_ratio=0.1):
+    cls_acc_list, mlm_acc_list = [], []
     idx_list = np.random.choice(len(X_test) // test_size, test_times, replace=False)
         
     with torch.no_grad():
@@ -236,18 +235,33 @@ def test(model, X_test, y_test, test_size=500,
             else:
                 test_idx = np.random.choice(len(X_test), test_size, replace=False)
             X_test_fold = X_test[test_idx]
+            token_mask = mask_generator(X_test_fold, mask_ratio, padding_size)
             y_test_fold = y_test[test_idx]
             batch_padding_size = max([len(seq) for seq in X_test_fold])
             X_test_fold = [prepare_sequence(sentence, g_pool['vocab'] , padding_size)
                                    for sentence in X_test_fold]
             X_test_fold = torch.stack(X_test_fold)
+            if g_pool['gpu']:
+                X_test_fold = X_test_fold.cuda()
             score_pred, mlm_pred = model(X_test_fold, batch_padding_size)
-            y_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
-            acc_sgl = sum(y_test_fold == y_pred_fold) / len(y_test_fold)
-            acc_list.append(acc_sgl)
             
-        acc = np.mean(acc_list)
-    return acc
+            cls_acc_sgl, mlm_acc_sgl = 0, 0
+            if score_pred is not None:
+                cls_pred_fold = np.array(torch.max(score_pred, 1)[1].tolist())
+                cls_acc_sgl = sum(y_test_fold == cls_pred_fold) / len(y_test_fold)
+                cls_acc_list.append(cls_acc_sgl)
+            if mlm_pred is not None:
+                mlm_pred_fold = torch.max(mlm_pred, 1)[1]
+                # this is the compare result
+                mlm_comp_res = mlm_pred_fold == X_test_fold
+                # this is where we care, we will set these position to be 1
+                care_part = token_mask == 0
+                mlm_masked_res = mlm_comp_res & care_part
+                
+                mlm_acc_sgl = np.sum(mlm_masked_res.tolist())/np.sum(care_part.tolist())
+                mlm_acc_list.append(mlm_acc_sgl)
+                
+    return np.mean(cls_acc_list or [0]), np.mean(mlm_acc_list or [0])
 
 def run_serial(kwargs):
     config = kwargs['config']
@@ -280,7 +294,8 @@ def run_serial(kwargs):
     n_head = int(model_conf['Params']['NHeaders'])
     n_attn = bool(int(model_conf['Params']['NAttn']))
     need_pos_enc = bool(int(model_conf['Params']['NeedPosEnc']))
-    mlm_flag = bool(int(model_conf['Params']['MlmFlag']))
+    mlm_weight = float(model_conf['Params']['MlmWeight'])
+    cls_weight = float(model_conf['Params']['ClsWeight'])
     mask_ratio = float(model_conf['Params']['MaskRatio'])
     
     # testing parameters
@@ -322,7 +337,6 @@ def run_serial(kwargs):
                      n_head=n_head,
                      n_attn=n_attn,
                      need_pos_enc=need_pos_enc,
-                     mlm_flag=mlm_flag,
                      is_gpu=gpu,
                      mask_ratio=mask_ratio)
     
@@ -357,17 +371,18 @@ def run_serial(kwargs):
                        early_stop=early_stop,
                        init_max_norm=init_max_norm,
                        max_norm_decay=max_norm_decay,
-                       mlm_flag=mlm_flag,
+                       mlm_weight=mlm_weight,
+                       cls_weight=cls_weight,
                        mask_ratio=mask_ratio)
     logger.debug("end training")
     
     # testing the result
     # because of the limitation of the GPU memory
     # have to test the result for multiple times
-    acc = test(model, X_test, y_test, test_size=fold_size, 
+    cls_acc, mlm_acc = test(model, X_test, y_test, test_size=fold_size, 
                test_times=no_test, padding_size=padding_size,
                random=False)
-    logger.info(f"The final accuracy is {acc:.2%}")
+    logger.info(f"The final accuracy is: cls: {cls_acc:.2%}, mlm: {mlm_acc:.2%}")
     return
 
 if __name__ == '__main__':
