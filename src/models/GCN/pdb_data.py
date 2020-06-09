@@ -18,6 +18,36 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from sklearn.metrics import auc
 
+def filter_go_terms_by_count(X, y, min_count = 25):
+    
+    counts = {}
+    for labels in y:
+        for label in labels:
+            counts[label] = counts.get(label, 0) + 1
+            
+    removal_indices = []
+    for i in range(len(y)):
+        labels = y[i]
+        for j in reversed(range(len(labels))):
+            label = labels[j]
+            if counts[label] < min_count:
+                labels.remove(label)
+                if len(labels) == 0:
+                    removal_indices.append(i)
+
+    for i in reversed(removal_indices):
+        X.pop(i)
+        y.pop(i)
+        
+    go_terms = set()
+    for labels in y:
+        for label in labels:
+            go_terms.add(label)
+
+    vocab = {mf: idx for idx, mf in enumerate(go_terms)}
+    
+    return X, y, vocab
+
 def main():
     
     logger = logging.getLogger('stdout')
@@ -90,86 +120,17 @@ def main():
             y_cc_data.append(cc_go_list)
             
     
-    # remove GO terms with less than 25 representatives     
-    mf_counts = {}
-    for labels in y_mf_data:
-        for label in labels:
-            mf_counts[label] = mf_counts.get(label, 0) + 1
-            
-    removal_indices = []
-    for i in range(len(y_mf_data)):
-        labels = y_mf_data[i]
-        for j in reversed(range(len(labels))):
-            label = labels[j]
-            if mf_counts[label] < 25:
-                labels.remove(label)
-                if len(labels) == 0:
-                    removal_indices.append(i)
-
-    for i in reversed(removal_indices):
-        X_mf_data.pop(i)
-        y_mf_data.pop(i)
-        
-    mf_terms = set()
-    for labels in y_mf_data:
-        for label in labels:
-            mf_terms.add(label)
-
-    mf_vocab = {mf: idx for idx, mf in enumerate(mf_terms)}
-    logger.debug(f'# of mf terms = {len(mf_vocab)}, # of proteins = {len(X_mf_data)}')
+    # remove GO terms with less than 25 representatives
+    min_count = 25
+    logger.debug(f'filtering out terms with less than {min_count} representatives')
     
-    bp_counts = {}
-    for labels in y_bp_data:
-        for label in labels:
-            bp_counts[label] = bp_counts.get(label, 0) + 1
-            
-    removal_indices = []
-    for i in range(len(y_bp_data)):
-        labels = y_bp_data[i]
-        for j in reversed(range(len(labels))):
-            label = labels[j]
-            if bp_counts[label] < 25:
-                labels.remove(label)
-                if len(labels) == 0:
-                    removal_indices.append(i)
+    X_mf_data, y_mf_data, mf_vocab = filter_go_terms_by_count(X_mf_data, y_mf_data, min_count)
+    logger.debug(f'# of mf terms = {len(mf_vocab)}, # of proteins = {len(X_mf_data)}')
 
-    for i in reversed(removal_indices):
-        X_bp_data.pop(i)
-        y_bp_data.pop(i)
-        
-    bp_terms = set()
-    for labels in y_bp_data:
-        for label in labels:
-            bp_terms.add(label)
-
-    bp_vocab = {bp: idx for idx, bp in enumerate(bp_terms)}
+    X_bp_data, y_bp_data, bp_vocab = filter_go_terms_by_count(X_bp_data, y_bp_data, min_count)
     logger.debug(f'# of bp terms = {len(bp_vocab)}, # of proteins = {len(X_bp_data)}')
     
-    cc_counts = {}
-    for labels in y_cc_data:
-        for label in labels:
-            cc_counts[label] = cc_counts.get(label, 0) + 1
-            
-    removal_indices = []
-    for i in range(len(y_cc_data)):
-        labels = y_cc_data[i]
-        for j in reversed(range(len(labels))):
-            label = labels[j]
-            if cc_counts[label] < 25:
-                labels.remove(label)
-                if len(labels) == 0:
-                    removal_indices.append(i)
-
-    for i in reversed(removal_indices):
-        X_cc_data.pop(i)
-        y_cc_data.pop(i)
-        
-    cc_terms = set()
-    for labels in y_cc_data:
-        for label in labels:
-            cc_terms.add(label)
-
-    cc_vocab = {cc: idx for idx, cc in enumerate(cc_terms)}
+    X_cc_data, y_cc_data, cc_vocab = filter_go_terms_by_count(X_cc_data, y_cc_data, min_count)
     logger.debug(f'# of cc terms = {len(cc_vocab)}, # of proteins = {len(X_cc_data)}')
     
     # save data
