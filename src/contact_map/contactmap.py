@@ -69,7 +69,7 @@ if __name__ == '__main__':
     num_successful_maps = 0
     num_failed_maps = 0
     
-    start_index = 27000
+    start_index = 0
     
     for pdb_code in pdb_list.split('\n')[start_index:]:
         #logger.debug(f'Processing {pdb_code}')
