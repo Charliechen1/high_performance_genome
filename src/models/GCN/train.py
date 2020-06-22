@@ -67,7 +67,7 @@ def prepare_dataset(X_data, y_data, go_vocab, aa_vocab):
         
     return dataset
 
-def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.00005, num_epoch = 100):
+def train(logger, model, dataset_train, dataset_val, target_dim, lr=0.0001, num_epoch = 200):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
     criterion = torch.nn.BCELoss()
@@ -167,43 +167,40 @@ def main():
     
     lm_model_paths = conf['path']['lm']
     
-    if type(lm_model_paths) != list:
-        lm_model_paths = [lm_model_paths]
-    
-    for lm_model_path in lm_model_paths:
+    for lm_model_path in lm_model_paths.split(','):
         
         language_model = torch.load(lm_model_path, map_location=device)
-        lm_embedding = language_model['model_state_dict']['module.word_embeddings.weight']
-                        
-        num_trials = int(conf['model']['num_trials'])
-        for i in range(num_trials):
-            
-            model_name = lm_model_path.split('/')[-1].split('.')[0] + '_GCN' + '_iter_{}'.format(i)
-            
-            if conf['model']['model'] == 'GCN':
+        lm = language_model['model_state_dict']
+        
+        for model_name in ['combined', 'gcn_only','lm_only', 'linear']:
 
-                model = GCN(target_dim, lm_embedding)
+        #model_name = lm_model_path.split('/')[-1].split('.')[0]
+        #model_name = f'no_lm_iter_{i+3}'
             
-            elif conf['model']['model'] == 'Toy':
-                
-                 model = Toy(target_dim, lm_embedding)
-                
+            if model_name == 'combined':
+                model = GCN(target_dim, lm)
+            elif model_name == 'gcn_only':
+                model = GCN(target_dim, None)
+            elif model_name == 'lm_only':
+                model = Toy(target_dim, lm)
+            else:
+                model = Toy(target_dim, None)
 
             model.to(device)
-            
+
             logger.debug(f'traning on {model_name}')
 
-            train(logger, model, train_data, val_data, target_dim)
-            
-            model_dir = conf['path']['models']
-            torch.save(model, model_dir + '/' + model_name + '.model')
+            train(logger, model, train_data + val_data, test_data, target_dim, .0001, 300)
 
-            scores, labels = evaluate(model, val_data, target_dim)
-            
+            model_dir = conf['path']['models']
+            torch.save(model, model_dir + model_name  + '_GCN' + '.model')
+
+            scores, labels = evaluate(model, test_data, target_dim)
+
             precision, recall, ap_score = compute_pr(scores, labels, target_dim)
-            
+
             logger.debug('Average precision score for {}: {}'.format(model_name, ap_score))
-            
+
             plt.step(recall, precision, where='post', label = 'AP score for {}: {}'.format(model_name, ap_score))
             
     plt.xlabel('Recall')
@@ -213,8 +210,8 @@ def main():
     plt.title('micro-averaged PR curve over all classes')
     plt.legend()
     figure_dir = conf['path']['figures']
-    plt.savefig(figure_dir + '/temp.png')   
-    logger.debug('plot saved to: ' + figure_dir + '/temp.png')
+    plt.savefig(figure_dir + 'tests.png')   
+    logger.debug('plot saved to: ' + figure_dir + 'test.png')
 
 if __name__ == '__main__':
     

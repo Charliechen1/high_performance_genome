@@ -82,12 +82,12 @@ def main():
     df = df[['PDB', 'GO_ID']]
     pdb_to_go = {}
     for key, value in df.values:
-        go_list = pdb_to_go.get(key.upper(), set())
+        go_list = pdb_to_go.get(key, set())
         go_list.add(value)
-        pdb_to_go[key.upper()] = go_list
+        pdb_to_go[key] = go_list
         
     # load preprocessed PDB sequences
-    sequence_json = conf['path']['sequence_dict']
+    sequence_json = conf['path']['sequence_dir']
     with open(sequence_json, 'r') as f:
         sequence_dict = json.load(f)
     
@@ -123,13 +123,13 @@ def main():
     # remove GO terms with less than 25 representatives
     min_count = 25
     logger.debug(f'filtering out terms with less than {min_count} representatives')
-    
+
     X_mf_data, y_mf_data, mf_vocab = filter_go_terms_by_count(X_mf_data, y_mf_data, min_count)
     logger.debug(f'# of mf terms = {len(mf_vocab)}, # of proteins = {len(X_mf_data)}')
 
     X_bp_data, y_bp_data, bp_vocab = filter_go_terms_by_count(X_bp_data, y_bp_data, min_count)
     logger.debug(f'# of bp terms = {len(bp_vocab)}, # of proteins = {len(X_bp_data)}')
-    
+
     X_cc_data, y_cc_data, cc_vocab = filter_go_terms_by_count(X_cc_data, y_cc_data, min_count)
     logger.debug(f'# of cc terms = {len(cc_vocab)}, # of proteins = {len(X_cc_data)}')
     
