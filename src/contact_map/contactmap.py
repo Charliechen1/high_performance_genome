@@ -40,21 +40,21 @@ if __name__ == '__main__':
     
     logger.debug('process starting')
     
-    if not os.path.exists(filename):
-        
-        snap_dir = conf['path']['snap_dir']
-        df = pd.DataFrame()
-        for file in os.listdir(snap_dir):
-            df = pd.concat((df, pd.read_csv(snap_dir + '/' + file, 
-                       sep = '\t', skiprows = 1, header = None,
-                       names = ['NCBI taxid', 'Category', 'GO', 'String']
-                       )))
-        ensembl_file = conf['path']['ensembl']
-        ensembl_to_pdb = pd.read_csv(ensembl_file, skiprows = 1)
-        ensembl_to_pdb = ensembl_to_pdb[['PDB', 'TRANSLATION_ID']].drop_duplicates()
-        df['TRANSLATION_ID'] = df['String'].astype(str).apply(lambda x : x.split('.')[1])
-        df = df.merge(ensembl_to_pdb, on = 'TRANSLATION_ID')
-        df['PDB'].drop_duplicates().to_csv(filename, sep = ',', header = False, index = False)
+    #if not os.path.exists(filename):
+    #    
+    #    snap_dir = conf['path']['snap_dir']
+    #    df = pd.DataFrame()
+    #    for file in os.listdir(snap_dir):
+    #        df = pd.concat((df, pd.read_csv(snap_dir + '/' + file, 
+    #                   sep = '\t', skiprows = 1, header = None,
+    #                   names = ['NCBI taxid', 'Category', 'GO', 'String']
+    #                   )))
+    #    ensembl_file = conf['path']['ensembl']
+    #    ensembl_to_pdb = pd.read_csv(ensembl_file, skiprows = 1)
+    #    ensembl_to_pdb = ensembl_to_pdb[['PDB', 'TRANSLATION_ID']].drop_duplicates()
+    #   df['TRANSLATION_ID'] = df['String'].astype(str).apply(lambda x : x.split('.')[1])
+    #    df = df.merge(ensembl_to_pdb, on = 'TRANSLATION_ID')
+    #    df['PDB'].drop_duplicates().to_csv(filename, sep = ',', header = False, index = False)
     
     if not os.path.exists(contact_map_dir):
         os.makedirs(contact_map_dir)
@@ -72,17 +72,18 @@ if __name__ == '__main__':
     start_index = 0
     
     for pdb_code in pdb_list.split('\n')[start_index:]:
+        
+        code, chain = pdb_code.split('-')
+        
         #logger.debug(f'Processing {pdb_code}')
         pdbl = Bio.PDB.PDBList()
-        pdb_path = pdbl.retrieve_pdb_file(pdb_code, pdir = pdb_dir, file_format = 'pdb', overwrite = True)
+        pdb_path = pdbl.retrieve_pdb_file(code, pdir = pdb_dir, file_format = 'pdb', overwrite = True)
+        #pdb_path = pdb_dir + '/pdb' + pdb_code.lower() + '.ent'
         if os.path.exists(pdb_path) and not os.path.exists(contact_map_dir + '/' + pdb_code):
-            structure = Bio.PDB.PDBParser(QUIET = True).get_structure(pdb_code, pdb_path)
-        #    model = structure[0]
-        #    sequence = Bio.PDB.Selection.unfold_entities(model, 'R')
-        #    if len(sequence) <= 3000:
+            structure = Bio.PDB.PDBParser(QUIET = True).get_structure(code, pdb_path)
             try:
                 ppb = Bio.PDB.CaPPBuilder()
-                pp = ppb.build_peptides(structure)[0]
+                pp = ppb.build_peptides(structure[0][chain])[0]
                 sequence_dict[pdb_code] = str(pp.get_sequence())
                 dist_matrix = calc_dist_matrix(pp)
                 contact_map = np.array((dist_matrix < 8.0) & (dist_matrix > 0.01))*1
@@ -105,6 +106,7 @@ if __name__ == '__main__':
             os.remove(pdb_path)
         else:
             pass
+        
     json_data = json.dumps(sequence_dict)
     f = open(sequence_dir,"w")
     f.write(json_data)
